@@ -32,7 +32,7 @@ class PPE_DATA(Dataset):
         new_width, new_height = int(width * scale), int(height * scale)
         img = F.interpolate(img.unsqueeze(0), size=(new_height, new_width), mode='bilinear', align_corners=False)
 
-        # pad with grey (114, 114, 114), normalized
+        # pad with grey (114, 114, 114), not normalized
         pad_top = (output_size - new_height) // 2
         pad_bottom = output_size - new_height - pad_top
         pad_left = (output_size - new_width) // 2
@@ -58,7 +58,7 @@ class PPE_DATA(Dataset):
         # img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
         lbl_path = img_path.replace('/images/', '/labels/').rsplit('.', 1)[0] + '.txt'
         if os.stat(lbl_path).st_size == 0:
-            labels = np.empty((0, 5), dtype=np.float32)  # or shape (0,) if you prefer
+            labels = np.ones((1,5)) * -1  # or shape (0,) if you prefer
         else:
             labels = np.loadtxt(lbl_path, dtype=np.float32)
         
@@ -109,6 +109,7 @@ class PPE_DATA(Dataset):
             rect = patches.Rectangle((x, y), w, h, linewidth=1, edgecolor='r', facecolor='none')
             ax.add_patch(rect)
 
+        n /= 255.0
         plt.imshow(n)
         plt.axis('off')
         plt.savefig(f"output_images/{output_file}", bbox_inches='tight', pad_inches=0)
