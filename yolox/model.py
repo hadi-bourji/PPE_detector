@@ -6,9 +6,9 @@ Complete YOLOX model implementation
 
 import torch
 import torch.nn as nn
-from backbone import CSPDarknet
-from neck import YOLOPAFPN
-from head import YOLOXHead
+from .backbone import CSPDarknet
+from .neck import YOLOPAFPN
+from .head import YOLOXHead
 
 
 class YOLOX(nn.Module):

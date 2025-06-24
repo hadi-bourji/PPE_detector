@@ -6,7 +6,7 @@ Simple weight loading test for YOLOX-s with variable number of classes
 import os
 import torch
 import requests
-from model import create_yolox_s
+from .model import create_yolox_s
 
 
 def download_weights(save_path="yolox_s.pth"):
@@ -69,6 +69,9 @@ def load_pretrained_weights(model, weights_path, num_classes=None):
     
     # Get model's state dict
     state_dict = map_pretrained_weights(state_dict)
+    # with open("state_dict_mapped.txt", "w") as f:
+    #     for k, v in state_dict.items():
+    #         f.write(f"{k}: {v.shape}\n")
     model_dict = model.state_dict()
     
     # Filter out classification layers if num_classes is different
@@ -101,7 +104,16 @@ if __name__ == "__main__":
 
     # for testing
     weights_path = download_weights()
-    num_classes = 4
+    num_classes = 80
     model = create_yolox_s(num_classes)
-    load_pretrained_weights(model, weights_path, num_classes)
-    print(model(torch.randn(1, 3, 640, 640)).shape)  # Test forward pass
+    model_dict = model.state_dict
+    model = load_pretrained_weights(model, weights_path, num_classes)
+    # state_dict = torch.load(weights_path)["model"]
+    # with open("model_dict.txt", "w") as f:
+    #     for k, v in model_dict().items():
+    #         f.write(f"{k}: {v.shape}\n")
+    # with open("state_dict.txt", "w") as f:
+    #     for k, v in state_dict.items():
+    #         f.write(f"{k}: {v.shape}\n")
+    # load_pretrained_weights(model, weights_path, num_classes)
+    # print(model(torch.randn(1, 3, 640, 640)).shape)  # Test forward pass

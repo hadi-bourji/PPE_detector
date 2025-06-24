@@ -6,7 +6,7 @@ Standalone implementation of CSPDarknet backbone
 
 import torch
 import torch.nn as nn
-from network_blocks import BaseConv, CSPLayer, DWConv, Focus, SPPBottleneck
+from .network_blocks import BaseConv, CSPLayer, DWConv, Focus, SPPBottleneck
 
 
 class CSPDarknet(nn.Module):

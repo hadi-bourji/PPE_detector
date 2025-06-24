@@ -6,7 +6,7 @@ Standalone implementation of YOLO-PAFPN neck
 
 import torch
 import torch.nn as nn
-from network_blocks import BaseConv, CSPLayer, DWConv
+from .network_blocks import BaseConv, CSPLayer, DWConv
 
 
 class YOLOPAFPN(nn.Module):

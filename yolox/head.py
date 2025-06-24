@@ -8,7 +8,7 @@ import math
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from network_blocks import BaseConv, DWConv
+from .network_blocks import BaseConv, DWConv
 
 
 class YOLOXHead(nn.Module):

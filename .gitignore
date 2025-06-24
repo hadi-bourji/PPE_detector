@@ -3,3 +3,4 @@ data/
 output_images/
 *.zip
 *.pth
+__pycache__/
