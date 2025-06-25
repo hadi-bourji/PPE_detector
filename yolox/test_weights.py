@@ -97,9 +97,6 @@ def load_pretrained_weights(model, weights_path, num_classes=None):
     
     return model
 
-
-
-
 if __name__ == "__main__":
 
     # for testing

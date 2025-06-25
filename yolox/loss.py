@@ -17,9 +17,11 @@ class YOLOXLoss(nn.Module):
         self.strides = strides
         
         self.bce_loss = nn.BCEWithLogitsLoss(reduction='none')
+        # TODO should I use this? Where would it go?
+        # also TODO should I use focal loss instead of BCE?
         self.l1_loss = nn.L1Loss(reduction='none')
     
-
+    # TODO test this 
     def forward(self, predictions, targets, input_size=640):
         device = predictions.device
         batch_size = predictions.shape[0]
@@ -42,7 +44,7 @@ class YOLOXLoss(nn.Module):
                 total_obj_loss += obj_loss
                 continue
 
-            gt_targets = targets[batch_idx][valid_mask]
+            gt_targets = targets[batch_idx, valid_mask]
             gt_classes = gt_targets[:, 0].long()
             gt_boxes = gt_targets[:, 1:5] * input_size
 
@@ -87,6 +89,7 @@ class YOLOXLoss(nn.Module):
                 total_box_loss += box_loss
 
         total_loss = 5.0 * total_box_loss + total_obj_loss + total_cls_loss
+        # TODO should loss be normalized by total_num_fg?
         return {
             'total_loss': total_loss,
             'box_loss': total_box_loss,
@@ -157,7 +160,8 @@ class YOLOXLoss(nn.Module):
 
         # this is for mixed precision training, could be taken off if I leave everything
         # in fp32
-        with torch.cuda.amp.autocast(enabled=False):
+        # TODO figure out if I am running in mixed precision or not
+        with torch.amp.autocast(device_type="cuda",enabled=False):
             cls_preds_ = (
                 cls_preds_.float().sigmoid_() * obj_preds_.float().sigmoid_()
             ).sqrt()
@@ -280,7 +284,7 @@ class YOLOXLoss(nn.Module):
         area_i = torch.prod(br - tl, 2) * en  # * ((tl < br).all())
         return area_i / (area_a[:, None] + area_b - area_i)
 
-    def ciou_loss(pred_boxes, target_boxes, eps=1e-7):
+    def ciou_loss(self, pred_boxes: torch.Tensor, target_boxes: torch.Tensor, eps=1e-7):
         """
         pred_boxes & target_boxes:  (N, 4)  format  [cx, cy, w, h]  (absolute pixels)
         Returns:  CIoU loss  (N,)  where 0 == perfect overlap
