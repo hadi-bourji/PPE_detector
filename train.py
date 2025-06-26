@@ -122,7 +122,7 @@ def train(num_classes = 4, num_epochs = 50, validate = True, batch_size = 16, ma
     
     
 
-    writer.close()
+            writer.close()
 if __name__ == "__main__":
     if torch.cuda.is_available():
         print("Using GPU for training")
