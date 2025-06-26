@@ -14,12 +14,11 @@ from rich.table import Table
 from rich.live import Live
 from rich.progress import Progress, SpinnerColumn, BarColumn, TimeElapsedColumn
 from pathlib import Path
-import json
 
 def train(num_classes = 4, num_epochs = 50, validate = True, batch_size = 16, max_gt=30, 
           logging = True, device="cuda"):
 
-    console = Console(record=True, log_path=False)        # record=True lets us export later
+    console = Console(record=True, force_terminal=True, width=110, height=1000,log_path=False)        # record=True lets us export later
     metrics_history = []                                   # will also dump to JSON/CSV if you like
     
     # Build a table once; we’ll *mutate* it inside Live()
@@ -180,11 +179,17 @@ def train(num_classes = 4, num_epochs = 50, validate = True, batch_size = 16, ma
                     writer.add_scalar("IoU Loss/Val", running_val_box_loss / len(val_dataloader), epoch)
                     writer.add_scalar("Objectness Loss/Val", running_val_obj_loss / len(val_dataloader), epoch)
                     writer.close()
-        log_dir = Path("./logs_rich")
-        log_dir.mkdir(exist_ok=True)
-        console.save_text(log_dir / "training.txt")          # a colourised text file
-        
-        console.print(f"[green]\N{check mark} Rich logs saved to {log_dir.absolute()}[/]")
+    export_console = Console(record=True, force_terminal=True, width=110, height=table.row_count+4, log_path=False)
+    export_console.print(table)
+
+    Path("logs_rich/final_table.txt").write_text(
+        export_console.export_text(clear=False),
+        encoding="utf-8"
+    )
+    log_dir = Path("./logs_rich")
+    log_dir.mkdir(exist_ok=True)
+    
+    console.print(f"[green]\N{check mark} Rich logs saved to {log_dir.absolute()}[/]")
         
     
                

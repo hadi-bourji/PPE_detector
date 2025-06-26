@@ -5,3 +5,4 @@ output_images/
 *.pth
 __pycache__/
 logs/
+logs_rich/
