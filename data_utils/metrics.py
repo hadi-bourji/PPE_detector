@@ -5,7 +5,7 @@ from torchvision.ops import batched_nms
 # pred: (6,) gt: (num_gt, 5). For both, 1:5 are box coordinates
 def pairwise_iou(pred, gt):
 
-    pcx, pcy, pw, ph = pred[1:]
+    pcx, pcy, pw, ph = pred[1:5]
     px1, py1 = pcx - pw / 2, pcy - ph / 2
     px2, py2 = pcx + pw / 2, pcy + ph / 2
 
@@ -30,14 +30,14 @@ def pairwise_iou(pred, gt):
     iou = inter_area / (union_area + 1e-7)
     return iou
 
-def calculate_AP_per_class(gt, preds, gt_to_img, preds_to_img, iou_thresh):
+def calculate_AP_per_class(gt, preds, gt_to_img, preds_to_img, iou_thresh, device = "cuda"):
 
-    tp = torch.zeros(preds.shape[0], dtype=torch.float32)
-    fp = torch.zeros(preds.shape[0], dtype=torch.float32)
-    precision = torch.zeros(preds.shape[0], dtype=torch.float32)
-    recall = torch.zeros(preds.shape[0], dtype=torch.float32)
+    tp = torch.zeros(preds.shape[0], dtype=torch.float32).to(device)
+    fp = torch.zeros(preds.shape[0], dtype=torch.float32).to(device)
+    precision = torch.zeros(preds.shape[0], dtype=torch.float32).to(device)
+    recall = torch.zeros(preds.shape[0], dtype=torch.float32).to(device)
     num_gt = gt.shape[0]
-    gt_matched = torch.zeros(gt.shape[0], dtype = torch.bool)
+    gt_matched = torch.zeros(gt.shape[0], dtype = torch.bool).to(device)
     for i, pred in enumerate(preds):
         # index into preds_to img to find which image this prediction is a part of,
         # then extract all ground truth boxes from this image to compute IoU
@@ -76,11 +76,15 @@ def calculate_AP_per_class(gt, preds, gt_to_img, preds_to_img, iou_thresh):
     mpre = torch.flip(torch.cummax(torch.flip(mpre, dims=[0]), dim=0).values,
                   dims=[0])
     chg = (mrec[1:] != mrec[:-1]).nonzero(as_tuple=False).squeeze(1)
+    if chg.numel() == 0:
+        # no change in recall, return 0 AP
+        return torch.tensor(0.0, device=device)
     ap  = torch.sum((mrec[chg + 1] - mrec[chg]) * mpre[chg + 1])
     return ap
 
 # gt is a list of the ground truth boxes, preds is a list of predicted boxes+confidence
-def calculate_mAP(img_ids: torch.Tensor, gts: torch.Tensor, preds: torch.Tensor, num_classes = 4, iou_thresh = 0.5):
+def calculate_mAP(img_ids: torch.Tensor, gts: torch.Tensor, preds: torch.Tensor, 
+                  num_classes = 4, iou_thresh = 0.5, device = "cuda"):
 
     # a mapping from ground truth boxes to their img id
     # used to ensure predictions are being compared only to the same image
@@ -93,16 +97,15 @@ def calculate_mAP(img_ids: torch.Tensor, gts: torch.Tensor, preds: torch.Tensor,
 
     # refactor this to work with the way batch_nms returns indices 
     batch_len = img_ids.shape[0]
-    preds_to_img = torch.empty(0)
-    final_preds = torch.empty(0, 6)
+    preds_to_img = torch.empty(0).to(device)
+    final_preds = torch.empty(0, 6).to(device)  # 6 = 1 class + 4 bbox coords + 1 score
     for batch_idx in range(batch_len):
         # add img id to the beginning of each ground truth box
         img_id = img_ids[batch_idx]
         pred = preds[batch_idx]
-        processed_preds, keep = post_process_img(pred, confidence_threshold=0.25, iou_threshold=iou_thresh)
-        preds_to_img = torch.cat((preds_to_img, img_id.repeat(processed_preds.shape[0], 1)), dim=0)
+        processed_preds = post_process_img(pred, confidence_threshold=0.25, iou_threshold=iou_thresh)
+        preds_to_img = torch.cat((preds_to_img, img_id.repeat(processed_preds.shape[0])), dim=0)
         final_preds = torch.cat((final_preds, processed_preds), dim=0)
-
     scores= final_preds[:, -1]
     # sort by score, descending
     _, order = scores.sort(descending=True)
@@ -111,8 +114,9 @@ def calculate_mAP(img_ids: torch.Tensor, gts: torch.Tensor, preds: torch.Tensor,
 
     total_ap = 0
     for i in range(num_classes):
-        gt_class_mask = true_gt[:, 0] == i
-        pred_class_mask = final_preds[:, 0] == i
+        idx = torch.tensor([i], device=device)
+        gt_class_mask = true_gt[:, 0] == idx
+        pred_class_mask = final_preds[:, 0] == idx
         if not gt_class_mask.any() and not pred_class_mask.any():
             continue
         AP = calculate_AP_per_class(true_gt[gt_class_mask], final_preds[pred_class_mask], 
@@ -151,7 +155,7 @@ def post_process_img(output, confidence_threshold = 0.25, iou_threshold = 0.5) -
     predictions = torch.cat((final_classes.unsqueeze(1), 
                              final_boxes, 
                              final_scores.unsqueeze(1)), dim=1)
-    return predictions, keep
+    return predictions
 
 if __name__ == "__main__":
     mAP = calculate_mAP(torch.randn((16)), 

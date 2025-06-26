@@ -11,12 +11,12 @@ from tqdm import tqdm
 from torch.utils.tensorboard import SummaryWriter
 
 def train(num_classes = 4, num_epochs = 50, validate = True, batch_size = 16, max_gt=30, 
-          logging = True):
+          logging = True, device="cuda"):
     # dataset and viz functions are only configured for 4 classes anyway
     weight_path = download_weights("yolox/yolox_s.pth")
     model = create_yolox_s(num_classes)
     model = load_pretrained_weights(model, weight_path, num_classes)
-    model.train().cuda()
+    model.train().to(device)
 
     dataset = PPE_DATA(data_path="./data", mode="train")
     dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True, num_workers=4)
@@ -36,12 +36,13 @@ def train(num_classes = 4, num_epochs = 50, validate = True, batch_size = 16, ma
 
     for epoch in tqdm(range(num_epochs), desc="Training Epochs"):
         running_train_loss = 0.0
-        model.train()
-
+        running_train_box_loss = 0.0
+        running_train_cls_loss = 0.0
+        running_train_obj_loss = 0.0
         for batch in tqdm(dataloader, desc=f"Epoch {epoch+1}/{num_epochs}"):
             img, labels = batch
-            img = img.cuda()
-            labels = labels.cuda()
+            img = img.to(device)
+            labels = labels.to(device)
 
             # Forward pass
             # output shape: (batch, 8400, 9)
@@ -49,6 +50,9 @@ def train(num_classes = 4, num_epochs = 50, validate = True, batch_size = 16, ma
             loss_dict = loss_fn(outputs, labels)
             total_loss = loss_dict["total_loss"]
             running_train_loss += total_loss.item()
+            running_train_box_loss += loss_dict["box_loss"]
+            running_train_cls_loss += loss_dict["cls_loss"]
+            running_train_obj_loss += loss_dict["obj_loss"]
 
             # Backward pass and optimization
             optimizer.zero_grad()
@@ -56,21 +60,32 @@ def train(num_classes = 4, num_epochs = 50, validate = True, batch_size = 16, ma
             optimizer.step()
 
         if validate:
-            model.eval()
+            # model.eval()
             with torch.no_grad():
-                all_img_ids = torch.empty(0, dtype=torch.int64).cuda()
-                all_gts = torch.empty(0, max_gt, 5).cuda()
-                all_preds = torch.empty(0, 8400, 6).cuda()
+                all_img_ids = torch.empty(0, dtype=torch.int64).to(device)
+                # the 5 is 4 for bbox and 1 for class
+                all_gts = torch.empty(0, max_gt, 5).to(device)
+                # 8400 is the number of anchors
+                all_preds = torch.empty(0, 8400, 5 + num_classes).to(device)
                 running_val_loss = 0.0
+                running_val_box_loss = 0.0
+                running_val_cls_loss = 0.0
+                running_val_obj_loss = 0.0
                 for batch in tqdm(val_dataloader, desc=f"Validation Epoch {epoch+1}/{num_epochs}"):
                     img_ids, img, labels = batch
-                    img = img.cuda()
-                    labels = labels.cuda()
+                    img_ids, img, labels = img_ids.to(device), img.to(device), labels.to(device)
 
                     # Forward pass
                     outputs = model(img)
-                    val_loss = loss_fn(outputs, labels)
-                    running_val_loss += val_loss.item()
+                    val_loss_dict = loss_fn(outputs, labels)
+                    val_loss = val_loss_dict["total_loss"]
+
+                    running_val_loss += val_loss
+                    running_val_box_loss += val_loss_dict["box_loss"]
+                    running_val_cls_loss += val_loss_dict["cls_loss"]
+                    running_val_obj_loss += val_loss_dict["obj_loss"]
+                    # apply in place sigmoid for mAP calcua
+                    outputs[...,4:].sigmoid_()
                     all_img_ids = torch.cat((all_img_ids, img_ids), dim=0)
                     all_gts = torch.cat((all_gts, labels), dim=0)
                     all_preds = torch.cat((all_preds, outputs), dim=0)
@@ -79,7 +94,7 @@ def train(num_classes = 4, num_epochs = 50, validate = True, batch_size = 16, ma
                 all_img_ids, 
                 all_gts, 
                 all_preds, 
-                IoU_thresh=0.5, 
+                iou_thresh=0.5, 
                 num_classes=num_classes
             )
             print(f"mAP: {mAP:.4f}")
@@ -91,12 +106,28 @@ def train(num_classes = 4, num_epochs = 50, validate = True, batch_size = 16, ma
               f"Train Loss: {train_loss:.4f}, "
               f"Val Loss: {val_loss:.4f}")
         if logging:
-            
+
             writer.add_scalar("Total Loss/Train", train_loss, epoch)
             
             writer.add_scalar("Total Loss/Val", val_loss, epoch)
+            writer.add_scalar("BCE Loss/Train", running_train_cls_loss / len(dataloader), epoch)
+            writer.add_scalar("IoU Loss/Train", running_train_box_loss / len(dataloader), epoch)
+            writer.add_scalar("Objectness Loss/Train", running_train_obj_loss / len(dataloader), epoch)
+
             if validate:
                 writer.add_scalar("mAP >50", mAP, epoch)
+                writer.add_scalar("BCE Loss/Val", running_val_cls_loss / len(val_dataloader), epoch)
+                writer.add_scalar("IoU Loss/Val", running_val_box_loss / len(val_dataloader), epoch)
+                writer.add_scalar("Objectness Loss/Val", running_val_obj_loss / len(val_dataloader), epoch)
+    
+    
+
     writer.close()
 if __name__ == "__main__":
-    train(num_classes=4, num_epochs=50, validate=True, batch_size=16, max_gt=30)
+    if torch.cuda.is_available():
+        print("Using GPU for training")
+        device = "cuda"
+    else:
+        print("Using CPU for training")
+        device = "cpu"
+    train(num_classes=4, num_epochs=50, validate=True, batch_size=16, max_gt=30, device=device, logging=True)

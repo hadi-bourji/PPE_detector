@@ -4,3 +4,4 @@ output_images/
 *.zip
 *.pth
 __pycache__/
+logs/

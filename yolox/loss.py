@@ -145,13 +145,13 @@ class YOLOXLoss(nn.Module):
             y_shifts,
         )
 
+
         bboxes_preds_per_image = bboxes_preds_per_image[fg_mask]
         cls_preds_ = cls_preds[batch_idx][fg_mask]
         obj_preds_ = obj_preds[batch_idx][fg_mask]
         num_in_boxes_anchor = bboxes_preds_per_image.shape[0]
 
         pair_wise_ious = self.bboxes_iou(gt_bboxes_per_image, bboxes_preds_per_image, False)
-
         gt_cls_per_image = (
             F.one_hot(gt_classes.to(torch.int64), self.num_classes)
             .float()
