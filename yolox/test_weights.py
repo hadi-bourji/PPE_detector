@@ -6,7 +6,7 @@ Simple weight loading test for YOLOX-s with variable number of classes
 import os
 import torch
 import requests
-from .model import create_yolox_s
+from yolox.model import create_yolox_s
 
 
 def download_weights(save_path="yolox_s.pth"):
@@ -52,7 +52,7 @@ def map_pretrained_weights(state_dict):
     
     return mapped_dict
 
-def load_pretrained_weights(model, weights_path, num_classes=None):
+def load_pretrained_weights(model, weights_path, num_classes=None, remap = True):
     """
     Load pretrained weights into model, handling different number of classes
     
@@ -68,14 +68,14 @@ def load_pretrained_weights(model, weights_path, num_classes=None):
     state_dict = checkpoint.get('model', checkpoint)
     
     # Get model's state dict
-    state_dict = map_pretrained_weights(state_dict)
+    if remap:
+        state_dict = map_pretrained_weights(state_dict)
     # with open("state_dict_mapped.txt", "w") as f:
     #     for k, v in state_dict.items():
     #         f.write(f"{k}: {v.shape}\n")
-    model_dict = model.state_dict()
     
     # Filter out classification layers if num_classes is different
-    if num_classes is not None and num_classes != 80:  # 80 is COCO classes
+    if num_classes is not None and num_classes != 80 and remap:  # 80 is COCO classes
         print(f"Adapting from 80 classes to {num_classes} classes")
         
         # Remove classification prediction layers

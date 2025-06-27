@@ -79,7 +79,8 @@ class PPE_DATA(Dataset):
         return len(self.file_names)
 
     @staticmethod
-    def show_img(img, labels, output_file="output.png", rect_coords_centered = True):
+    def show_img(img, labels, output_file="output.png", rect_coords_centered = True, 
+                 normalized = True, show_conf_score = False):
         # Currently only accepts 3D pytorch tensors, outputs to img file
         # most comments are for the matplotlib code, switched to using opencv
         if img.ndim == 4:
@@ -89,7 +90,6 @@ class PPE_DATA(Dataset):
         else:
             n = img.cpu().numpy()
 
-        fig, ax = plt.subplots()
         # use this to draw different colors for each label
         edge_colors = [(0,0,255), (0,255,0), (255,0,0), (0,255,255)]
         class_names = ["coat", "no-coat", "eyewear", "no-eyewear"]
@@ -100,14 +100,14 @@ class PPE_DATA(Dataset):
         n = n.astype(np.uint8)
         for label in labels:
             if rect_coords_centered:
-                c, x, y, w, h = label
+                c, x, y, w, h = label[:5]
                 if c == -1:
                     continue
-
-                x *= n.shape[1]
-                y *= n.shape[0]
-                w *= n.shape[1]
-                h *= n.shape[0]
+                if normalized:
+                    x *= n.shape[1]
+                    y *= n.shape[0]
+                    w *= n.shape[1]
+                    h *= n.shape[0]
 
                 # yolo format gives x and y as center coordinates, convert to top-left corner
                 x1 = int(x - w / 2)
@@ -115,30 +115,25 @@ class PPE_DATA(Dataset):
                 x2 = int(x + w / 2)
                 y2 = int(y + h / 2)
             else:
-                c, x1, y1, x2, y2 = label
+                c, x1, y1, x2, y2 = label[:5]
                 if c == -1:
                     continue
-                # x = int(x1)
-                # y = int(y1)
-                # w = int(x2 - x1)
-                # h = int(y2 - y1)
+            text = class_names[int(c.item())]
+            if show_conf_score:
+                s = float(label[5])
+                text = f"{text} {s:.2f}"
             
             color = edge_colors[int(c.item())]
 
             # rect = patches.Rectangle((x, y), w, h, linewidth=1, edgecolor=edge_color, facecolor='none')
             cv2.rectangle(n, (x1, y1), (x2, y2), color, 1)
-            text = class_names[int(c.item())]
             (tw, th), _ = cv2.getTextSize(text, cv2.FONT_HERSHEY_SIMPLEX,
                                         fontScale=0.5, thickness=1)
             cv2.rectangle(n, (x1, y1 - th - 4), (x1 + tw, y1), color, -1)   # filled bg
             cv2.putText(n, text, (x1, y1 - 2),
                 cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0,0,0), 1, cv2.LINE_AA)
-            # ax.add_patch(rect)
 
         cv2.imwrite(f"output_images/{output_file}", n)
-        # plt.imshow(n)
-        # plt.axis('off')
-        # plt.savefig(f"output_images/{output_file}", bbox_inches='tight', pad_inches=0)
 
 if __name__ == "__main__":
     dataset = PPE_DATA()

@@ -1,6 +1,10 @@
 import torch
-import einops
 from torchvision.ops import batched_nms
+import matplotlib.pyplot as plt
+
+from .ppe_dataset import PPE_DATA
+from yolox.model import create_yolox_s
+from yolox.test_weights import load_pretrained_weights
 
 # pred: (6,) gt: (num_gt, 5). For both, 1:5 are box coordinates
 def pairwise_iou(pred, gt):
@@ -30,7 +34,8 @@ def pairwise_iou(pred, gt):
     iou = inter_area / (union_area + 1e-7)
     return iou
 
-def calculate_AP_per_class(gt, preds, gt_to_img, preds_to_img, iou_thresh, device = "cuda"):
+def calculate_AP_per_class(gt, preds, gt_to_img, preds_to_img, iou_thresh, device = "cuda", 
+                           plot_pr = False, class_id = 0):
 
     tp = torch.zeros(preds.shape[0], dtype=torch.float32).to(device)
     fp = torch.zeros(preds.shape[0], dtype=torch.float32).to(device)
@@ -80,11 +85,24 @@ def calculate_AP_per_class(gt, preds, gt_to_img, preds_to_img, iou_thresh, devic
         # no change in recall, return 0 AP
         return torch.tensor(0.0, device=device)
     ap  = torch.sum((mrec[chg + 1] - mrec[chg]) * mpre[chg + 1])
+    if plot_pr:
+        mrec = mrec.cpu().numpy()
+        mpre = mpre.cpu().numpy()
+        class_names = ["coat", "no-coat", "eyewear", "no-eyewear"]
+        plt.figure(figsize = (5,5))
+        plt.step(mrec, mpre, where="post", label = f"Class {class_id} AP: {ap:.4f}")
+        plt.xlabel("Recall")
+        plt.ylabel("Precision")
+        plt.title(f"Precision-Recall Curve for Class {class_id}")
+        plt.xlim(0,1); plt.ylim(0,1)
+        plt.legend()
+        plt.savefig(f"output_images/class_{class_names[class_id]}_pr_curve.png")
+        print("saved plt")
     return ap
 
 # gt is a list of the ground truth boxes, preds is a list of predicted boxes+confidence
 def calculate_mAP(img_ids: torch.Tensor, gts: torch.Tensor, preds: torch.Tensor, 
-                  num_classes = 4, iou_thresh = 0.5, device = "cuda"):
+                  num_classes = 4, iou_thresh = 0.5, device = "cuda", plot_pr = False):
 
     # a mapping from ground truth boxes to their img id
     # used to ensure predictions are being compared only to the same image
@@ -121,13 +139,14 @@ def calculate_mAP(img_ids: torch.Tensor, gts: torch.Tensor, preds: torch.Tensor,
             continue
         AP = calculate_AP_per_class(true_gt[gt_class_mask], final_preds[pred_class_mask], 
                                gt_to_img[gt_class_mask], preds_to_img[pred_class_mask],
-                               iou_thresh)
+                               iou_thresh, device=device, plot_pr=plot_pr, class_id=i)
         total_ap += AP
 
     return total_ap / num_classes
 
 def post_process_img(output, confidence_threshold = 0.25, iou_threshold = 0.5) -> torch.Tensor:
-
+    ''' This function expects the output to be in pixel values and sigmoid to already be applied
+    to obj and class probabilities.'''
     x1 = output[..., 0:1] - output[..., 2:3] / 2
     y1 = output[..., 1:2] - output[..., 3:4] / 2
     x2 = output[..., 0:1] + output[..., 2:3] / 2
@@ -158,7 +177,16 @@ def post_process_img(output, confidence_threshold = 0.25, iou_threshold = 0.5) -
     return predictions
 
 if __name__ == "__main__":
-    mAP = calculate_mAP(torch.randn((16)), 
-        torch.randn(16, 30, 5), 
-        torch.randn(16, 8400, 6))
-    print(f"mAP: {mAP:.4f}")
+    device = "cuda"
+    dataset = PPE_DATA(data_path="./data", mode="val")
+    loader = torch.utils.data.DataLoader(dataset, batch_size=16, shuffle=False)
+    model = create_yolox_s(num_classes=4)
+    weight_path = "/home/mattb709/projects/ML/PPEDetection/model_checkpoints/yolox_s_ep50_bs16_lr1e-03_wd5e-04_06-27_09.pth"
+    model = load_pretrained_weights(model, weight_path, num_classes=4, remap = False)
+    model.eval().to(device)
+    for batch in loader:
+        img_ids, imgs, gts = batch
+        img_ids, imgs, gts = img_ids.to(device), imgs.to(device), gts.to(device)  
+        with torch.no_grad():
+            outputs = model(imgs)
+        mAP = calculate_mAP(img_ids, gts, outputs, num_classes=4, iou_thresh=0.5, device=device, plot_pr=True)

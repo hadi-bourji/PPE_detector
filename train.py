@@ -77,7 +77,7 @@ def train(num_classes = 4, num_epochs = 50, validate = True, batch_size = 16, ma
     model.train().to(device)
 
     dataset = PPE_DATA(data_path="./data", mode="train")
-    dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True, num_workers=4)
+    dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True, num_workers=4, pin_memory=True)
     if validate:
         val_dataset = PPE_DATA(data_path="./data", mode="val")
         val_dataloader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, num_workers=4)
@@ -131,6 +131,8 @@ def train(num_classes = 4, num_epochs = 50, validate = True, batch_size = 16, ma
                 total_loss.backward()
                 optimizer.step()
                 progress.advance(batch_task_id)
+                progress.advance(epoch_task, advance = 1 / (len(dataloader) + len(val_dataloader)))
+
             progress.remove_task(batch_task_id)
             if validate:
                 batch_task_id = progress.add_task(
@@ -169,6 +171,7 @@ def train(num_classes = 4, num_epochs = 50, validate = True, batch_size = 16, ma
                         all_gts = torch.cat((all_gts, labels), dim=0)
                         all_preds = torch.cat((all_preds, outputs), dim=0)
                         progress.advance(batch_task_id)
+                        progress.advance(epoch_task, advance = 1 / (len(dataloader) + len(val_dataloader)))
                     progress.remove_task(batch_task_id)
                 
                 mAP = calculate_mAP(
@@ -203,7 +206,6 @@ def train(num_classes = 4, num_epochs = 50, validate = True, batch_size = 16, ma
                                     "val_obj_loss": running_val_obj_loss / len(val_dataloader)}
                                     )
             live.update(Group(progress, make_table(metrics_history, num_rows_to_show)), refresh=True)
-            progress.advance(epoch_task)
             
                 
         if logging:
