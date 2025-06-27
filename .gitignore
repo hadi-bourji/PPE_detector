@@ -4,5 +4,6 @@ output_images/
 *.zip
 *.pth
 __pycache__/
-logs/
-logs_rich/
+model_checkpoints/
+# logs/
+# logs_rich/
