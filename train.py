@@ -52,7 +52,7 @@ def train(num_classes = 4, num_epochs = 50, validate = True, batch_size = 16, ma
           logging = True, device="cuda", lr = 0.001, weight_decay = 0.0005):
     today = datetime.today()
     date_str = today.strftime("%m-%d_%H")
-    exp_name = f"yolox_s_bs{batch_size}_lr{lr:.0e}_wd{weight_decay:.0e}_{date_str}"
+    exp_name = f"yolox_s_ep{num_epochs}bs{batch_size}_lr{lr:.0e}_wd{weight_decay:.0e}_{date_str}"
     print(f"Experiment Name: {exp_name}")
 
     console = Console(record=True, force_terminal=True, width=110, height=1000,log_path=False)        # record=True lets us export later
@@ -206,22 +206,23 @@ def train(num_classes = 4, num_epochs = 50, validate = True, batch_size = 16, ma
                                     "val_obj_loss": running_val_obj_loss / len(val_dataloader)}
                                     )
             live.update(Group(progress, make_table(metrics_history, num_rows_to_show)), refresh=True)
-            
                 
-        if logging:
-
-            writer.add_scalar("Total Loss/Train", train_loss, epoch)
-            
-            writer.add_scalar("Total Loss/Val", val_loss, epoch)
-            writer.add_scalar("BCE Loss/Train", running_train_cls_loss / len(dataloader), epoch)
-            writer.add_scalar("IoU Loss/Train", running_train_box_loss / len(dataloader), epoch)
-            writer.add_scalar("Objectness Loss/Train", running_train_obj_loss / len(dataloader), epoch)
+            if logging:
     
-            if validate:
-                writer.add_scalar("mAP >50", mAP, epoch)
-                writer.add_scalar("BCE Loss/Val", running_val_cls_loss / len(val_dataloader), epoch)
-                writer.add_scalar("IoU Loss/Val", running_val_box_loss / len(val_dataloader), epoch)
-                writer.add_scalar("Objectness Loss/Val", running_val_obj_loss / len(val_dataloader), epoch)
+                writer.add_scalar("Total Loss/Train", train_loss, epoch)
+                
+                writer.add_scalar("Total Loss/Val", val_loss, epoch)
+                writer.add_scalar("BCE Loss/Train", running_train_cls_loss / len(dataloader), epoch)
+                writer.add_scalar("IoU Loss/Train", running_train_box_loss / len(dataloader), epoch)
+                writer.add_scalar("Objectness Loss/Train", running_train_obj_loss / len(dataloader), epoch)
+        
+                if validate:
+                    writer.add_scalar("mAP >50", mAP, epoch)
+                    writer.add_scalar("BCE Loss/Val", running_val_cls_loss / len(val_dataloader), epoch)
+                    writer.add_scalar("IoU Loss/Val", running_val_box_loss / len(val_dataloader), epoch)
+                    writer.add_scalar("Objectness Loss/Val", running_val_obj_loss / len(val_dataloader), epoch)
+            if (epoch + 1) % 50 == 0:
+                torch.save(model.state_dict(), f"model_checkpoints/{exp_name}_ce{epoch+1}.pth")
 
     console.print("[bold green] Training Complete")
     console.print(f"Total training time: {perf_counter() - t0:.2f} seconds")
@@ -243,4 +244,4 @@ if __name__ == "__main__":
     else:
         print("Using CPU for training")
         device = "cpu"
-    train(num_classes=4, num_epochs=50, validate=True, batch_size=16, max_gt=30, device=device, logging=False)
+    train(num_classes=4, num_epochs=200, validate=True, batch_size=16, max_gt=30, device=device, logging=False)
