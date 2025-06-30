@@ -27,5 +27,5 @@ def main(weight_path, device = "cuda"):
                           show_conf_score=True)
     print(f"successfully saved {len(ids)} images with predictions.")
 if __name__ == "__main__":
-    main("model_checkpoints/yolox_s_ep50_bs16_lr1e-03_wd5e-04_06-27_09.pth", device = "cuda")
+    main("model_checkpoints/yolox_s_bs16_lr1e-03_wd5e-04_06-27_14_ce200.pth", device = "cuda")
         

@@ -4,9 +4,8 @@ import torch.nn.functional as F
 import numpy as np
 import cv2
 import einops
-import matplotlib.pyplot as plt
-import matplotlib.patches as patches
 import os
+import kornia as K
 
 # Set matplotlib to use non-interactive backend to avoid Qt issues
 import matplotlib
@@ -132,8 +131,9 @@ class PPE_DATA(Dataset):
             cv2.rectangle(n, (x1, y1 - th - 4), (x1 + tw, y1), color, -1)   # filled bg
             cv2.putText(n, text, (x1, y1 - 2),
                 cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0,0,0), 1, cv2.LINE_AA)
-
-        cv2.imwrite(f"output_images/{output_file}", n)
+        path = os.path.join("output_images", output_file)
+        print(f"Saving image with predictions to {path}")
+        cv2.imwrite(path, n)
 
 if __name__ == "__main__":
     dataset = PPE_DATA()
