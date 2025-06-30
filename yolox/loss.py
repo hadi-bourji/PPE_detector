@@ -88,7 +88,7 @@ class YOLOXLoss(nn.Module):
                 box_loss = self.ciou_loss(pred_boxes, target_boxes).mean()
                 total_box_loss += box_loss
 
-        total_loss = 5.0 * total_box_loss + total_obj_loss + total_cls_loss
+        total_loss = (5.0 * total_box_loss + total_obj_loss + total_cls_loss) / max(total_num_fg, 1)
         # TODO should loss be normalized by total_num_fg?
         return {
             'total_loss': total_loss,
