@@ -115,6 +115,10 @@ class PPE_DATA(Dataset):
                 y2 = int(y + h / 2)
             else:
                 c, x1, y1, x2, y2 = label[:5]
+                x1 = int(x1)
+                y1 = int(y1)
+                x2 = int(x2)
+                y2 = int(y2)
                 if c == -1:
                     continue
             text = class_names[int(c.item())]

@@ -6,6 +6,7 @@ Better YOLOX loss with proper target assignment
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from data_utils.ppe_dataset import PPE_DATA
 
 
 class YOLOXLoss(nn.Module):
@@ -47,6 +48,7 @@ class YOLOXLoss(nn.Module):
             gt_targets = targets[batch_idx, valid_mask]
             gt_classes = gt_targets[:, 0].long()
             gt_boxes = gt_targets[:, 1:5] * input_size
+            print("gt_boxes: ", gt_boxes)
 
             num_gt = len(gt_boxes)
 
@@ -85,11 +87,15 @@ class YOLOXLoss(nn.Module):
 
                 pred_boxes = predictions[batch_idx, pos_mask, :4]
                 target_boxes = gt_boxes[matched_gt_inds]
+                print("pred_boxes: ", pred_boxes)
+                print("target_boxes: ", target_boxes)
+                break
                 box_loss = self.ciou_loss(pred_boxes, target_boxes).mean()
                 total_box_loss += box_loss
 
         total_loss = (5.0 * total_box_loss + total_obj_loss + total_cls_loss) / max(total_num_fg, 1)
         # TODO should loss be normalized by total_num_fg?
+        return pred_boxes, target_boxes
         return {
             'total_loss': total_loss,
             'box_loss': total_box_loss,

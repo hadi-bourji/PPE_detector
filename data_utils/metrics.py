@@ -9,9 +9,7 @@ from yolox.test_weights import load_pretrained_weights
 # pred: (6,) gt: (num_gt, 5). For both, 1:5 are box coordinates
 def pairwise_iou(pred, gt):
 
-    pcx, pcy, pw, ph = pred[1:5]
-    px1, py1 = pcx - pw / 2, pcy - ph / 2
-    px2, py2 = pcx + pw / 2, pcy + ph / 2
+    px1, py1, px2, py2 = pred[1:5]
 
     gcx = gt[:, 1]
     gcy = gt[:, 2]
@@ -19,6 +17,8 @@ def pairwise_iou(pred, gt):
     gh = gt[:, 4]
     gx1, gy1 = gcx - gw / 2, gcy - gh / 2
     gx2, gy2 = gcx + gw / 2, gcy + gh / 2
+    gx1 *= 640; gx2 *= 640
+    gy1 *= 640; gy2 *= 640
     # calculate intersection
     inter_x1 = torch.max(px1, gx1)
     inter_y1 = torch.max(py1, gy1)
@@ -28,6 +28,8 @@ def pairwise_iou(pred, gt):
     inter_h = torch.clamp(inter_y2 - inter_y1, min=0)
     inter_area = inter_w * inter_h
     # calculate union
+    pw = px2 - px1
+    ph = py2 - py1
     pred_area = pw * ph
     gt_area = gw * gh
     union_area = pred_area + gt_area - inter_area
