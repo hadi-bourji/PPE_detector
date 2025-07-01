@@ -5,11 +5,7 @@ import numpy as np
 import cv2
 import einops
 import os
-import kornia as K
 
-# Set matplotlib to use non-interactive backend to avoid Qt issues
-import matplotlib
-matplotlib.use('Agg')
 
 class PPE_DATA(Dataset):
     def __init__(self, data_path: str = "./data", mode="train", max_ground_truth_boxes=30):
