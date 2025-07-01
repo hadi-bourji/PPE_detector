@@ -1,5 +1,4 @@
 import torch
-from torchvision.ops import batched_nms
 from torch.utils.data import DataLoader
 from yolox.test_weights import download_weights, load_pretrained_weights
 from yolox.model import create_yolox_s
@@ -7,7 +6,6 @@ from data_utils.ppe_dataset import PPE_DATA
 from yolox.loss import YOLOXLoss
 from torch.optim import AdamW
 from data_utils.metrics import calculate_mAP
-from tqdm import tqdm
 from torch.utils.tensorboard import SummaryWriter
 from rich.console import Console, Group
 from rich.table import Table
@@ -16,7 +14,11 @@ from rich.progress import Progress, SpinnerColumn, BarColumn, TimeElapsedColumn,
 from time import perf_counter
 from datetime import datetime
 import csv
+import albumentations as A 
 
+A.BboxParams()
+A.Compose()
+A.Mosaic
 
 def make_table(metrics_history, num_rows_to_show=25):
     """Create a table from the metrics history"""
@@ -32,7 +34,7 @@ def make_table(metrics_history, num_rows_to_show=25):
     table.add_column("IoU Loss (V)", justify="right")
     table.add_column("Obj Loss (V)", justify="right")
 
-    for i, metrics in enumerate(metrics_history[-num_rows_to_show:]):
+    for metrics in metrics_history[-num_rows_to_show:]:
         table.add_row(
             str(metrics["epoch"]),
             f"{metrics['train_loss']:.4f}",
@@ -115,7 +117,7 @@ def train(num_classes = 4, num_epochs = 50, validate = True, batch_size = 16, ma
                 img, labels = batch
                 img = img.to(device)
                 labels = labels.to(device)
-    
+
                 # Forward pass
                 # output shape: (batch, 8400, 9)
                 outputs = model(img)
@@ -236,7 +238,7 @@ def train(num_classes = 4, num_epochs = 50, validate = True, batch_size = 16, ma
     if logging:
         writer.close()
 
-def unit_test():
+def map_test():
     model = create_yolox_s(num_classes=4)
     weight_path = "model_checkpoints/yolox_s_bs16_lr1e-03_wd5e-04_06-27_14_ce200.pth"
     model = load_pretrained_weights(model, weight_path, num_classes=4, remap=False)
