@@ -7,3 +7,4 @@ __pycache__/
 model_checkpoints/
 # logs/
 # logs_rich/
+inference_imgs/
