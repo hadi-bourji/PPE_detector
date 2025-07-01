@@ -117,10 +117,14 @@ def train(num_classes = 4, num_epochs = 50, validate = True, batch_size = 16, ma
                 img, labels = batch
                 img = img.to(device)
                 labels = labels.to(device)
+                # img is shape (batch_size, 3, 640, 640)
+                # labels is shape (batch_size, max_gt, 5) where 5 is [c, cx, cy, w, h], all normalized
 
                 # Forward pass
-                # output shape: (batch, 8400, 9)
+                # output shape: (batch, 8400, 9). Boxes are decoded to pixel space
+                # but left in cx cy format
                 outputs = model(img)
+
                 loss_dict = loss_fn(outputs, labels)
                 total_loss = loss_dict["total_loss"]
                 running_train_loss += total_loss.item()
