@@ -5,14 +5,13 @@ import numpy as np
 import cv2
 import einops
 import os
-import kornia as K
-
+from .mosaic import Mosaic
 # Set matplotlib to use non-interactive backend to avoid Qt issues
 import matplotlib
 matplotlib.use('Agg')
 
 class PPE_DATA(Dataset):
-    def __init__(self, data_path: str = "./data", mode="train", max_ground_truth_boxes=30):
+    def __init__(self, data_path: str = "./data", mode="train", max_ground_truth_boxes=30, device = "cuda"):
         # read file names from train.txt or validation.txt file
         self.mode = mode
         if mode == "train":
@@ -22,11 +21,11 @@ class PPE_DATA(Dataset):
         else:
             raise Exception("Invalid Mode Entered")
         self.max_gt = max_ground_truth_boxes
+        self.device = device
+        self.mosaic = Mosaic()
 
     def load_and_resize_img(self, img, labels,  output_size = 640):
 
-        img = torch.from_numpy(img).float() #/ 255.0 # normalize the image
-        img = einops.rearrange(img, "h w c -> c h w")
         height, width = img.shape[1:]
         scale = min(output_size / width, output_size / height)
 
@@ -49,25 +48,51 @@ class PPE_DATA(Dataset):
             labels[..., 4] = (labels[..., 4] * height * scale) / output_size              # h
 
         return img.squeeze(0), labels
+    
+    def resize_img(self, img, output_size = 640):
+        # resize image to output_size, keeping aspect ratio
+        img = torch.from_numpy(img).float() #/ 255.0 # normalize the image
+        img = einops.rearrange(img, "h w c -> c h w")
+        height, width = img.shape[1:]
+        scale = min(output_size / width, output_size / height)
+
+        new_width, new_height = int(width * scale), int(height * scale)
+        img = F.interpolate(img.unsqueeze(0), size=(new_height, new_width), mode='bilinear', align_corners=False)
+
+        return img.squeeze(0)
 
     def __getitem__(self, idx):
         img_path = self.file_names[idx]
         img = cv2.imread(img_path)
 
-        # opencv uses bgr, so switch to standard rgb
         lbl_path = img_path.replace('/images/', '/labels/').rsplit('.', 1)[0] + '.txt'
         if os.stat(lbl_path).st_size == 0:
-            labels = np.ones((1,5)) * -1  # or shape (0,) if you prefer
+            labels = np.empty((0, 5), dtype=np.float32)  # empty tensor for no labels
         else:
             labels = np.loadtxt(lbl_path, dtype=np.float32)
             if labels.ndim == 1:
                 labels = labels.reshape(1, -1)
-        
-        img, labels = self.load_and_resize_img(img, labels,)
+
+        if self.mode == "train":
+            img = self.resize_img(img, output_size=640)
+            img, labels = self.mosaic.forward(img, labels, self.file_names, output_size=640)
+            PPE_DATA.show_img(img, labels, output_path=os.path.join("data_aug", f"mosaic_{idx}.png"),
+                              rect_coords_centered=True, normalized=True, show_conf_score=False)
+
+        elif self.mode == "val":
+            img, labels = self.load_and_resize_img(img, labels, output_size=640)
+
         if labels.shape[0] > self.max_gt:
-            Exception(f"Too many ground truth boxes in {lbl_path}: {labels.shape[0]} > {self.max_gt}")
-        labels = torch.from_numpy(labels)
-        labels = torch.cat((labels, torch.ones(self.max_gt - labels.shape[0], 5) * -1), dim=0)
+            raise Exception(f"Too many ground truth boxes in {lbl_path}: {labels.shape[0]} > {self.max_gt}")
+
+        # convert labels to tensor, add padding if necessaryjj
+        if type(labels) == np.ndarray:
+            labels = torch.from_numpy(labels)
+        padding = torch.ones(self.max_gt - labels.shape[0], 5)
+        padding[:, 0] = -1  # set class to -1 for padding
+        labels = torch.cat((labels, padding), dim=0)
+        
+        
         if self.mode == "val":
             # idx will be used as an img id for metric calculation
             return torch.tensor(idx), img, labels
@@ -78,7 +103,7 @@ class PPE_DATA(Dataset):
         return len(self.file_names)
 
     @staticmethod
-    def show_img(img, labels, output_file="output.png", rect_coords_centered = True, 
+    def show_img(img, labels, output_path=os.path.join("output_images", "output.png"), rect_coords_centered = True, 
                  normalized = True, show_conf_score = False):
         # Currently only accepts 3D pytorch tensors, outputs to img file
         # most comments are for the matplotlib code, switched to using opencv
@@ -87,7 +112,9 @@ class PPE_DATA(Dataset):
         if img.shape[0] == 3:
             n = einops.rearrange(img, "c h w -> h w c").cpu().numpy().copy()
         else:
-            n = img.cpu().numpy()
+            n = img.cpu().numpy().copy()
+        if n.dtype == np.float32 or n.dtype == np.float64:
+            n = n.astype(np.uint8)
 
         # use this to draw different colors for each label
         edge_colors = [(0,0,255), (0,255,0), (255,0,0), (0,255,255)]
@@ -135,10 +162,9 @@ class PPE_DATA(Dataset):
             cv2.rectangle(n, (x1, y1 - th - 4), (x1 + tw, y1), color, -1)   # filled bg
             cv2.putText(n, text, (x1, y1 - 2),
                 cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0,0,0), 1, cv2.LINE_AA)
-        path = os.path.join("output_images", output_file)
-        print(f"Saving image with predictions to {path}")
-        cv2.imwrite(path, n)
+        print(f"Saving image with predictions to {output_path}")
+        cv2.imwrite(output_path, n)
 
 if __name__ == "__main__":
     dataset = PPE_DATA()
-    dataset.__getitem__(11)
+    dataset.__getitem__(3)
