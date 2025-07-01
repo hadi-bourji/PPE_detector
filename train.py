@@ -282,4 +282,4 @@ if __name__ == "__main__":
     else:
         print("Using CPU for training")
         device = "cpu"
-    train(num_classes=4, num_epochs=100, validate=True, batch_size=16, max_gt=30, device=device, logging=True)
+    train(num_classes=4, num_epochs=100, validate=True, batch_size=32, max_gt=30, device=device, logging=True)
