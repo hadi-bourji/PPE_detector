@@ -11,7 +11,8 @@ import random
 from torchvision import tv_tensors
 class PPE_DATA(Dataset):
     def __init__(self, data_path: str = "./data", mode="train", 
-                 max_ground_truth_boxes=30, p_mosaic = 1/32, apply_transforms=False):
+                 max_ground_truth_boxes=30, p_mosaic = 1/32, apply_transforms=False, 
+                 include_eyewear = True):
         # read file names from train.txt or validation.txt file
         self.mode = mode
         if mode == "train":
@@ -27,7 +28,7 @@ class PPE_DATA(Dataset):
 
         # a boolean of whether or not to apply transforms
         self.transforms = apply_transforms
-
+        self.include_eyewear = include_eyewear  # if false, will not include eyewear labels in the dataset
 
     def apply_transforms(self, img, labels):
         # This returns the new img and normalized labels in the form 
@@ -120,6 +121,9 @@ class PPE_DATA(Dataset):
         img = torch.from_numpy(img).float() #/ 255.0 # normalize the image
         img = einops.rearrange(img, "h w c -> c h w")
         labels = torch.from_numpy(labels)
+        if not self.include_eyewear:
+            mask = (labels[:, 0] != 2) & (labels[:, 0] != 3)
+            labels = labels[mask]
         return img, labels
 
     def __getitem__(self, idx):
@@ -212,7 +216,8 @@ class PPE_DATA(Dataset):
         cv2.imwrite(output_path, n)
 
 if __name__ == "__main__":
-    dataset = PPE_DATA()
+    dataset = PPE_DATA(include_eyewear=False)
     index = int(random.random() * len(dataset))
     print(index)
-    dataset.__getitem__(index)
+    img, labels = dataset.__getitem__(index)
+    PPE_DATA.show_img(img, labels, output_path="output_images/output.png")

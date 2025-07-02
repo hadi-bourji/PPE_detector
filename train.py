@@ -49,7 +49,7 @@ def train(num_classes = 4, num_epochs = 50, validate = True, batch_size = 16, ma
           logging = True, device="cuda", lr = 0.001, weight_decay = 0.0005):
     today = datetime.today()
     date_str = today.strftime("%m-%d_%H")
-    exp_name = f"yolox_s_ep{num_epochs}_bs{batch_size}_lr{lr:.0e}_wd{weight_decay:.0e}_{date_str}"
+    exp_name = f"yolox_s_nc{num_classes}_ep{num_epochs}_bs{batch_size}_lr{lr:.0e}_wd{weight_decay:.0e}_{date_str}"
     print(f"Experiment Name: {exp_name}")
 
     console = Console(record=True, force_terminal=True, width=110, height=1000,log_path=False)        # record=True lets us export later
@@ -293,4 +293,4 @@ if __name__ == "__main__":
     else:
         print("Using CPU for training")
         device = "cpu"
-    train(num_classes=4, num_epochs=200, validate=True, batch_size=32, max_gt=30, device=device, logging=True, lr = 0.0001)
+    train(num_classes=2, num_epochs=200, validate=True, batch_size=32, max_gt=30, device=device, logging=True, lr = 0.0001)
