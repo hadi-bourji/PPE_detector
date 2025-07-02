@@ -8,3 +8,4 @@ model_checkpoints/
 # logs/
 # logs_rich/
 inference_imgs/
+data_aug/
