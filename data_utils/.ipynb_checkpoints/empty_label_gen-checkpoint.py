@@ -8,7 +8,7 @@ def generate_empty_labels(base_dir):
     for file in os.listdir(os.path.join(base_dir, "images", "train")):
         file_name = os.path.splitext(file)[0]
         label_path = os.path.join(base_dir, "labels", "train", f"{file_name}.txt")
-        if not os.path.exists(label_path):
+        if file.lower().endswith(".jpg") and not os.path.exists(label_path):
             print(label_path)
             open(label_path, "w").close()
 

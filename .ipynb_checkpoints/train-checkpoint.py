@@ -1,5 +1,4 @@
 import torch
-from torchvision.ops import batched_nms
 from torch.utils.data import DataLoader
 from yolox.test_weights import download_weights, load_pretrained_weights
 from yolox.model import create_yolox_s
@@ -7,7 +6,6 @@ from data_utils.ppe_dataset import PPE_DATA
 from yolox.loss import YOLOXLoss
 from torch.optim import AdamW
 from data_utils.metrics import calculate_mAP
-from tqdm import tqdm
 from torch.utils.tensorboard import SummaryWriter
 from rich.console import Console, Group
 from rich.table import Table
@@ -16,7 +14,6 @@ from rich.progress import Progress, SpinnerColumn, BarColumn, TimeElapsedColumn,
 from time import perf_counter
 from datetime import datetime
 import csv
-
 
 def make_table(metrics_history, num_rows_to_show=25):
     """Create a table from the metrics history"""
@@ -32,7 +29,7 @@ def make_table(metrics_history, num_rows_to_show=25):
     table.add_column("IoU Loss (V)", justify="right")
     table.add_column("Obj Loss (V)", justify="right")
 
-    for i, metrics in enumerate(metrics_history[-num_rows_to_show:]):
+    for metrics in metrics_history[-num_rows_to_show:]:
         table.add_row(
             str(metrics["epoch"]),
             f"{metrics['train_loss']:.4f}",
@@ -52,7 +49,7 @@ def train(num_classes = 4, num_epochs = 50, validate = True, batch_size = 16, ma
           logging = True, device="cuda", lr = 0.001, weight_decay = 0.0005):
     today = datetime.today()
     date_str = today.strftime("%m-%d_%H")
-    exp_name = f"yolox_s_ep{num_epochs}bs{batch_size}_lr{lr:.0e}_wd{weight_decay:.0e}_{date_str}"
+    exp_name = f"yolox_s_ep{num_epochs}_bs{batch_size}_lr{lr:.0e}_wd{weight_decay:.0e}_{date_str}"
     print(f"Experiment Name: {exp_name}")
 
     console = Console(record=True, force_terminal=True, width=110, height=1000,log_path=False)        # record=True lets us export later
@@ -75,8 +72,11 @@ def train(num_classes = 4, num_epochs = 50, validate = True, batch_size = 16, ma
     model = create_yolox_s(num_classes)
     model = load_pretrained_weights(model, weight_path, num_classes)
     model.train().to(device)
+    for k, v in model.named_parameters():
+        if k.startswith("backbone"):
+            v.requires_grad = False
 
-    dataset = PPE_DATA(data_path="./data", mode="train")
+    dataset = PPE_DATA(data_path="./data", mode="train",p_mosaic = 1 / batch_size, apply_transforms = True)
     dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True, num_workers=4, pin_memory=True)
     if validate:
         val_dataset = PPE_DATA(data_path="./data", mode="val")
@@ -98,6 +98,15 @@ def train(num_classes = 4, num_epochs = 50, validate = True, batch_size = 16, ma
         t0 = perf_counter()
         for epoch in range(num_epochs):
 
+            # Unfreeze model parameters after 10 epochs
+            if epoch == 10:
+                for k, v in model.named_parameters():
+                    if k.startswith("backbone"):
+                        v.requires_grad = True
+            
+            if epoch == num_epochs - 15:
+                dataset.transforms = False
+
             
             if batch_task_id is not None:          # remove previous batch bar
                 progress.remove_task(batch_task_id)
@@ -115,10 +124,14 @@ def train(num_classes = 4, num_epochs = 50, validate = True, batch_size = 16, ma
                 img, labels = batch
                 img = img.to(device)
                 labels = labels.to(device)
-    
+                # img is shape (batch_size, 3, 640, 640)
+                # labels is shape (batch_size, max_gt, 5) where 5 is [c, cx, cy, w, h], all normalized
+
                 # Forward pass
-                # output shape: (batch, 8400, 9)
+                # output shape: (batch, 8400, 9). Boxes are decoded to pixel space
+                # but left in cx cy format
                 outputs = model(img)
+
                 loss_dict = loss_fn(outputs, labels)
                 total_loss = loss_dict["total_loss"]
                 running_train_loss += total_loss.item()
@@ -236,7 +249,7 @@ def train(num_classes = 4, num_epochs = 50, validate = True, batch_size = 16, ma
     if logging:
         writer.close()
 
-def unit_test():
+def map_test():
     model = create_yolox_s(num_classes=4)
     weight_path = "model_checkpoints/yolox_s_bs16_lr1e-03_wd5e-04_06-27_14_ce200.pth"
     model = load_pretrained_weights(model, weight_path, num_classes=4, remap=False)
@@ -280,4 +293,4 @@ if __name__ == "__main__":
     else:
         print("Using CPU for training")
         device = "cpu"
-    train(num_classes=4, num_epochs=100, validate=True, batch_size=32, max_gt=30, device=device, logging=True)
+    train(num_classes=4, num_epochs=200, validate=True, batch_size=32, max_gt=30, device=device, logging=True, lr = 0.0001)
