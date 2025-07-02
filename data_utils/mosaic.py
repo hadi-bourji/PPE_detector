@@ -19,11 +19,13 @@ class Mosaic(nn.Module):
 
         scale = min(output_width / width, output_height / height)
 
-        new_width, new_height = int(width * scale), int(height * scale)
+        if scale < 1:
+            new_width, new_height = int(width * scale), int(height * scale)
+        else:
+            new_width, new_height = width, height
 
         # shrink down the img if it's smaller, otherwise just pad
-        if new_width < width or new_height < height:
-            new_img = F.interpolate(new_img.unsqueeze(0), size=(new_height, new_width), mode='bilinear', align_corners=False)
+        new_img = F.interpolate(new_img.unsqueeze(0), size=(new_height, new_width), mode='bilinear', align_corners=False)
 
         # pad with grey (114, 114, 114), not normalized
         pad_top = (output_height - new_height) // 2
@@ -34,11 +36,18 @@ class Mosaic(nn.Module):
         new_img = F.pad(new_img, (pad_left, pad_right, pad_top, pad_bottom), value=114.0)
 
         # scale labels up to pixel coords, scale by the same refactoring, add padding, then normalize
-        if labels.any():
-            labels[..., 1] = (labels[..., 1] * width * scale + pad_left) / output_width   # xc
-            labels[..., 2] = (labels[..., 2] * height * scale + pad_top) / output_height  # yc
-            labels[..., 3] = (labels[..., 3] * width * scale) / output_width              # w
-            labels[..., 4] = (labels[..., 4] * height * scale) / output_height             # h
+        if scale < 1:
+            if labels.any():
+                labels[..., 1] = (labels[..., 1] * width * scale + pad_left) / output_width   # xc
+                labels[..., 2] = (labels[..., 2] * height * scale + pad_top) / output_height  # yc
+                labels[..., 3] = (labels[..., 3] * width * scale) / output_width              # w
+                labels[..., 4] = (labels[..., 4] * height * scale) / output_height             # h
+        else:
+            if labels.any():
+                labels[..., 1] = (labels[..., 1] * width + pad_left) / output_width   # xc
+                labels[..., 2] = (labels[..., 2] * height + pad_top) / output_height  # yc
+                labels[..., 3] = (labels[..., 3] * width) / output_width              # w
+                labels[..., 4] = (labels[..., 4] * height) / output_height             # h
 
         return new_img.squeeze(0), labels
     

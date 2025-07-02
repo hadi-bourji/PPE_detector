@@ -11,13 +11,13 @@ import random
 from torchvision import tv_tensors
 class PPE_DATA(Dataset):
     def __init__(self, data_path: str = "./data", mode="train", 
-                 max_ground_truth_boxes=30, p_mosaic = 1/32):
+                 max_ground_truth_boxes=30, p_mosaic = 1/32, apply_transforms=False):
         # read file names from train.txt or validation.txt file
         self.mode = mode
         if mode == "train":
-            self.file_names = np.loadtxt(f"{data_path}/train.txt", dtype=str)
+            self.file_names = np.genfromtxt(f"{data_path}/train.txt", dtype=str, delimiter="\n")
         elif mode == "val":
-            self.file_names = np.loadtxt(f"{data_path}/validation.txt", dtype=str)
+            self.file_names = np.genfromtxt(f"{data_path}/validation.txt", dtype=str, delimiter="\n")
         else:
             raise Exception("Invalid Mode Entered")
         
@@ -25,9 +25,12 @@ class PPE_DATA(Dataset):
         self.p_mosaic = p_mosaic
         self.mosaic = Mosaic()
 
+        # a boolean of whether or not to apply transforms
+        self.transforms = apply_transforms
+
 
     def apply_transforms(self, img, labels):
-
+        # This returns the new img and normalized labels in the form 
         # apply mosaic augmentation with a probability of p_mosaic
         if random.random() < self.p_mosaic:
             img = self.resize_img(img, output_size=640)
@@ -42,7 +45,16 @@ class PPE_DATA(Dataset):
         y_min = (y - h / 2)
         box_labels = torch.cat([x_min, y_min, w, h], dim=1)
         boxes = tv_tensors.BoundingBoxes(box_labels, format="XYWH", canvas_size=(img_size, img_size))
-
+        transforms = v2.Compose([
+            v2.RandomHorizontalFlip(p=0.5),
+            # v2.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.2, hue=0.1),
+            v2.RandomAffine(degrees=10, translate=(0.1, 0.1), scale=(0.9, 1.1)),
+        ])
+        img, boxes = transforms(img, boxes)
+        labels = torch.cat([labels[:, :1], boxes], dim=1)  # keep class and confidence score
+        labels[:,1] = labels[:, 1] + labels[:,3] / 2
+        labels[:,2] = labels[:, 2] + labels[:,4] / 2
+        labels[:,1:5] = labels[:, 1:5] / img_size
         return img, labels
 
     # Used for validaation, just resize and pad
@@ -50,12 +62,12 @@ class PPE_DATA(Dataset):
 
         height, width = img.shape[1:]
         scale = min(output_size / width, output_size / height)
-
-        new_width, new_height = int(width * scale), int(height * scale)
-
-        # shrink down the img if it's smaller, otherwise just pad
-        if new_width < width or new_height < height:
-            img = F.interpolate(img.unsqueeze(0), size=(new_height, new_width), mode='bilinear', align_corners=False)
+        if scale < 1:
+            new_width, new_height = int(width * scale), int(height * scale)
+        else:
+            # don't scale up the image if it is already smaller than output size
+            new_width, new_height = width, height
+        img = F.interpolate(img.unsqueeze(0), size=(new_height, new_width), mode='bilinear', align_corners=False)
 
         # pad with grey (114, 114, 114), not normalized
         pad_top = (output_size - new_height) // 2
@@ -66,19 +78,24 @@ class PPE_DATA(Dataset):
         img = F.pad(img, (pad_left, pad_right, pad_top, pad_bottom), value = 114.0)
 
         # scale labels up to pixel coords, scale by the same refactoring, add padding, then normalize
-        if labels.any():
-            labels[..., 1] = (labels[..., 1] * width * scale + pad_left) / output_size   # xc
-            labels[..., 2] = (labels[..., 2] * height * scale + pad_top ) / output_size   # yc
-            labels[..., 3] = (labels[..., 3] * width * scale) / output_size              # w
-            labels[..., 4] = (labels[..., 4] * height * scale) / output_size              # h
+        if scale < 1:
+            if labels.any():
+                labels[..., 1] = (labels[..., 1] * width * scale + pad_left) / output_size   # xc
+                labels[..., 2] = (labels[..., 2] * height * scale + pad_top ) / output_size   # yc
+                labels[..., 3] = (labels[..., 3] * width * scale) / output_size              # w
+                labels[..., 4] = (labels[..., 4] * height * scale) / output_size              # h
+        else:
+            if labels.any():
+                labels[..., 1] = (labels[..., 1] * width + pad_left) / output_size   # xc
+                labels[..., 2] = (labels[..., 2] * height + pad_top) / output_size   # yc
+                labels[..., 3] = (labels[..., 3] * width) / output_size              # w
+                labels[..., 4] = (labels[..., 4] * height) / output_size              # h
 
         return img.squeeze(0), labels
     
     # Used for training as input into transforms
     def resize_img(self, img, output_size = 640):
         # resize image to output_size, keeping aspect ratio
-        img = torch.from_numpy(img).float() #/ 255.0 # normalize the image
-        img = einops.rearrange(img, "h w c -> c h w")
         height, width = img.shape[1:]
         scale = min(output_size / width, output_size / height)
 
@@ -100,26 +117,24 @@ class PPE_DATA(Dataset):
             labels = np.loadtxt(lbl_path, dtype=np.float32)
             if labels.ndim == 1:
                 labels = labels.reshape(1, -1)
+        img = torch.from_numpy(img).float() #/ 255.0 # normalize the image
+        img = einops.rearrange(img, "h w c -> c h w")
+        labels = torch.from_numpy(labels)
         return img, labels
 
     def __getitem__(self, idx):
         img_path = self.file_names[idx]
         img, labels = self.read_img_and_labels(img_path)
 
-        if self.mode == "train":
+        if self.transforms:
             img, labels = self.apply_transforms(img, labels)
-            PPE_DATA.show_img(img, labels, output_path=os.path.join("data_aug", f"mosaic_{idx}.png"),
-                              rect_coords_centered=True, normalized=True, show_conf_score=False)
-
-        elif self.mode == "val":
-            img, labels = self.load_and_resize_img(img, labels, output_size=640)
+        else:
+            img, labels = self.resize_and_pad_img(img, labels, output_size=640)
 
         if labels.shape[0] > self.max_gt:
             raise Exception(f"Too many ground truth boxes in {img_path}: {labels.shape[0]} > {self.max_gt}")
 
         # convert labels to tensor, add padding if necessary
-        if type(labels) == np.ndarray:
-            labels = torch.from_numpy(labels)
         padding = torch.ones(self.max_gt - labels.shape[0], 5)
         padding[:, 0] = -1  # set class to -1 for padding
         labels = torch.cat((labels, padding), dim=0)
@@ -198,4 +213,6 @@ class PPE_DATA(Dataset):
 
 if __name__ == "__main__":
     dataset = PPE_DATA()
-    dataset.__getitem__(5)
+    index = int(random.random() * len(dataset))
+    print(index)
+    dataset.__getitem__(index)

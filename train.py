@@ -14,11 +14,6 @@ from rich.progress import Progress, SpinnerColumn, BarColumn, TimeElapsedColumn,
 from time import perf_counter
 from datetime import datetime
 import csv
-import albumentations as A 
-
-A.BboxParams()
-A.Compose()
-A.Mosaic
 
 def make_table(metrics_history, num_rows_to_show=25):
     """Create a table from the metrics history"""
@@ -77,8 +72,11 @@ def train(num_classes = 4, num_epochs = 50, validate = True, batch_size = 16, ma
     model = create_yolox_s(num_classes)
     model = load_pretrained_weights(model, weight_path, num_classes)
     model.train().to(device)
+    for k, v in model.named_parameters():
+        if k.startswith("backbone"):
+            v.requires_grad = False
 
-    dataset = PPE_DATA(data_path="./data", mode="train")
+    dataset = PPE_DATA(data_path="./data", mode="train",p_mosaic = 1 / batch_size, apply_transforms = True)
     dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True, num_workers=4, pin_memory=True)
     if validate:
         val_dataset = PPE_DATA(data_path="./data", mode="val")
@@ -99,6 +97,15 @@ def train(num_classes = 4, num_epochs = 50, validate = True, batch_size = 16, ma
         batch_task_id = None
         t0 = perf_counter()
         for epoch in range(num_epochs):
+
+            # Unfreeze model parameters after 10 epochs
+            if epoch == 10:
+                for k, v in model.named_parameters():
+                    if k.startswith("backbone"):
+                        v.requires_grad = True
+            
+            if epoch == num_epochs - 15:
+                dataset.transforms = False
 
             
             if batch_task_id is not None:          # remove previous batch bar
@@ -286,4 +293,4 @@ if __name__ == "__main__":
     else:
         print("Using CPU for training")
         device = "cpu"
-    train(num_classes=4, num_epochs=100, validate=True, batch_size=32, max_gt=30, device=device, logging=True)
+    train(num_classes=4, num_epochs=100, validate=True, batch_size=32, max_gt=30, device=device, logging=False)
