@@ -47,12 +47,14 @@ def process_frame(frame, device = 'cuda', output_size = 640):
     img = F.pad(img, (pad_left, pad_right, pad_top, pad_bottom), value = 114.0)
     return img
 
+frame_count = 0
+start = time.time()
 while True:
     ret, frame = cap.read()
     if not ret:
         print("Error: Could not read frame.")
         break
-
+    frame_count += 1
     img = process_frame(frame, device)
     with torch.no_grad():
         outputs = model(img)
@@ -84,7 +86,10 @@ while True:
         # cv2.imwrite(f'output_image{time.time()}.jpg', n)
          # Process outputs (this part depends on your model's output format)
     # For example, you might want to apply a threshold and draw bounding boxes
-
+    if frame_count % 30 == 0:
+        elapsed_time = time.time() - start
+        fps = frame_count / elapsed_time
+        print(f"Avg. FPS: {fps:.2f}")
     # Display the frame
     cv2.imshow('Frame', n)
 
