@@ -1,7 +1,7 @@
 import torch
 from torch.utils.data import DataLoader
 from yolox.test_weights import download_weights, load_pretrained_weights
-from yolox.model import create_yolox_s
+from yolox.model import create_yolox_s, create_yolox_l
 from data_utils.ppe_dataset import PPE_DATA
 from yolox.loss import YOLOXLoss
 from torch.optim import AdamW
@@ -68,7 +68,7 @@ def train(num_classes = 4, num_epochs = 50, validate = True, batch_size = 16, ma
     transient=True,                      # clear once finished
     )
     # dataset and viz functions are only configured for 4 classes anyway
-    weight_path = download_weights("yolox/yolox_s.pth")
+    weight_path = download_weights("yolox/yolox_s.pth", model = "yolox_s")
     model = create_yolox_s(num_classes)
     model = load_pretrained_weights(model, weight_path, num_classes)
     model.train().to(device)
@@ -76,15 +76,15 @@ def train(num_classes = 4, num_epochs = 50, validate = True, batch_size = 16, ma
         if k.startswith("backbone"):
             v.requires_grad = False
 
-    dataset = PPE_DATA(data_path="./data", mode="train",p_mosaic = 1 / batch_size, apply_transforms = True, include_eyewear = False)
+    dataset = PPE_DATA(data_path="./data", mode="train",p_mosaic = 1 / batch_size, apply_transforms = True)
     dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True, num_workers=4, pin_memory=True)
     if validate:
-        val_dataset = PPE_DATA(data_path="./data", mode="val", include_eyewear=False)
+        val_dataset = PPE_DATA(data_path="./data", mode="val")
         val_dataloader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, num_workers=4)
 
     loss_fn = YOLOXLoss(num_classes=num_classes)
     # TODO try out weight decay and learning rate scheduler
-    optimizer = AdamW(model.parameters(), lr=lr, weight_decay=weight_decay)
+    optimizer = AdamW(model.parameters(), lr=0.001, weight_decay=weight_decay)
 
     if logging:
         writer = SummaryWriter(log_dir=f"./logs/{exp_name}")
@@ -98,14 +98,16 @@ def train(num_classes = 4, num_epochs = 50, validate = True, batch_size = 16, ma
         t0 = perf_counter()
         for epoch in range(num_epochs):
 
-            # Unfreeze model parameters after 10 epochs
+            # Unfreeze model parameters after 10 epochs, decrease learning rate
             if epoch == 10:
                 for k, v in model.named_parameters():
                     if k.startswith("backbone"):
                         v.requires_grad = True
+
+                
             
-            if epoch == num_epochs - 15:
-                dataset.transforms = False
+            #if epoch == num_epochs - 10:
+            #    dataset.transforms = False
 
             
             if batch_task_id is not None:          # remove previous batch bar
@@ -293,4 +295,4 @@ if __name__ == "__main__":
     else:
         print("Using CPU for training")
         device = "cpu"
-    train(num_classes=2, num_epochs=100, validate=True, batch_size=32, max_gt=30, device=device, logging=True, lr = 0.001)
+    train(num_classes=4, num_epochs=50, validate=True, batch_size=32, max_gt=30, device=device, logging=True, lr = 0.001)
