@@ -41,7 +41,7 @@ class PPE_DATA(Dataset):
         
         # at this point it should be 640, if not something messed up with mosaic most likely
         img_size = 640
-        cx, w, y, h = labels[:, 1:2] * img_size, labels[:, 3:4] * img_size, labels[:, 2:3] * img_size, labels[:, 4:5] * img_size
+        cx, y, w, h = labels[:, 1:2] * img_size,  labels[:, 2:3] * img_size, labels[:, 3:4] * img_size, labels[:, 4:5] * img_size
         x_min = (cx - w / 2)
         y_min = (y - h / 2)
         box_labels = torch.cat([x_min, y_min, w, h], dim=1)

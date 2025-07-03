@@ -1,6 +1,6 @@
 import cv2
 import torch
-from yolox.test_weights import create_yolox_s, load_pretrained_weights, download_weights
+from yolox.test_weights import create_yolox_s, load_pretrained_weights, download_weights, create_yolox_l
 import einops
 from data_utils.metrics import post_process_img
 import time
@@ -8,7 +8,7 @@ import numpy as np
 import torch.nn.functional as F
 start = time.time()
 print("Starting video capture...")
-cap = cv2.VideoCapture(0)
+cap = cv2.VideoCapture(1)
 if not cap.isOpened():
     print("Error: Could not open video.")
     exit()
@@ -20,7 +20,7 @@ device = 'cuda' if torch.cuda.is_available() else 'cpu'
 print(f"Using device: {device}")
 
 num_classes = 4
-weight_path = 'model_checkpoints\\yolox_s_ep50bs16_lr1e-03_wd5e-04_06-30_09.pth'
+weight_path = 'model_checkpoints\\yolox_s_ep200_bs32_lr1e-03_wd5e-04_07-02_11.pth'
 # weight_path = download_weights('yolox_s.pth')
 model = create_yolox_s(num_classes)
 model = load_pretrained_weights(model, weight_path, num_classes, remap = False)
@@ -58,7 +58,7 @@ while True:
     img = process_frame(frame, device)
     with torch.no_grad():
         outputs = model(img)
-        outputs = post_process_img(outputs[0], confidence_threshold=0.25, iou_threshold=0.5)
+        outputs = post_process_img(outputs[0], confidence_threshold=0.5, iou_threshold=0.5)
     img = img.squeeze(0)
     n = einops.rearrange(img, "c h w -> h w c").cpu().numpy().copy().astype(np.uint8)
     edge_colors = [(0,0,255), (0,255,0), (255,0,0), (0,255,255)]
@@ -74,7 +74,7 @@ while True:
         y1 = int(y1)
         x2 = int(x2)
         y2 = int(y2)
-        text = class_names[int(c.item())]
+        text = f"{class_names[int(c.item())]} {s:.2f}"
         color = edge_colors[int(c.item())]
 
         cv2.rectangle(n, (x1, y1), (x2, y2), color, 1)
