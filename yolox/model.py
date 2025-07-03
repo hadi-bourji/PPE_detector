@@ -89,6 +89,40 @@ class YOLOXs(YOLOX):
         
         super().__init__(backbone, neck, head)
 
+class YOLOXl(YOLOX):
+
+    def __init__(self, num_classes = 80):
+        # YOLOX-l specific parameters
+        depth = 1.0
+        width = 1.0
+        
+        backbone = CSPDarknet(
+            dep_mul=depth,
+            wid_mul=width,
+            out_features=("dark3", "dark4", "dark5"),
+            depthwise=False,
+            act="silu"
+        )
+        
+        neck = YOLOPAFPN(
+            depth=depth,
+            width=width,
+            in_features=("dark3", "dark4", "dark5"),
+            in_channels=[256, 512, 1024],
+            depthwise=False,
+            act="silu"
+        )
+        
+        head = YOLOXHead(
+            num_classes=num_classes,
+            width=width,
+            strides=[8, 16, 32],
+            in_channels=[256, 512, 1024],
+            act="silu",
+            depthwise=False
+        )
+        
+        super().__init__(backbone, neck, head)
 
 def create_yolox_s(num_classes=80):
     """Create YOLOX-s model"""
@@ -96,6 +130,11 @@ def create_yolox_s(num_classes=80):
     model.init_weights()
     return model
 
+def create_yolox_l(num_classes=80):
+    """Create YOLOX-s model"""
+    model = YOLOXl(num_classes=num_classes)
+    model.init_weights()
+    return model
 
 def get_model_info(model, input_size=(640, 640)):
     """Get model information including parameters and FLOPs"""

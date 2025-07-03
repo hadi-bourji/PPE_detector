@@ -6,15 +6,21 @@ Simple weight loading test for YOLOX-s with variable number of classes
 import os
 import torch
 import requests
-from yolox.model import create_yolox_s
+# from yolox.model import create_yolox_s, create_yolox_l
+from .model import create_yolox_s, create_yolox_l
 
 
-def download_weights(save_path="yolox_s.pth"):
+def download_weights(save_path="yolox_s.pth", model = "yolox_s"):
     """Download YOLOX-s weights if not exists"""
     if os.path.exists(save_path):
         return save_path
     
-    url = "https://github.com/Megvii-BaseDetection/YOLOX/releases/download/0.1.1rc0/yolox_s.pth"
+    if model == "yolox_s":
+        url = "https://github.com/Megvii-BaseDetection/YOLOX/releases/download/0.1.1rc0/yolox_s.pth"
+    elif model == "yolox_l":
+        url = "https://github.com/Megvii-BaseDetection/YOLOX/releases/download/0.1.1rc0/yolox_l.pth"
+    else:
+        raise ValueError("Unsupported model type. Use 'yolox_s' or 'yolox_l'.")
     print(f"Downloading weights from {url}")
     
     response = requests.get(url, stream=True)
@@ -69,7 +75,7 @@ def load_pretrained_weights(model, weights_path, num_classes=None, remap = True)
     
     # Get model's state dict
     if remap:
-        state_dict = map_pretrained_weights(state_dict)
+            state_dict = map_pretrained_weights(state_dict)
     # with open("state_dict_mapped.txt", "w") as f:
     #     for k, v in state_dict.items():
     #         f.write(f"{k}: {v.shape}\n")
@@ -100,17 +106,9 @@ def load_pretrained_weights(model, weights_path, num_classes=None, remap = True)
 if __name__ == "__main__":
 
     # for testing
-    weights_path = download_weights()
-    num_classes = 80
-    model = create_yolox_s(num_classes)
+    weights_path = download_weights(save_path = "yolox_l.pth", model="yolox_l")
+    num_classes = 4
+    model = create_yolox_l(num_classes)
     model_dict = model.state_dict
     model = load_pretrained_weights(model, weights_path, num_classes)
-    # state_dict = torch.load(weights_path)["model"]
-    # with open("model_dict.txt", "w") as f:
-    #     for k, v in model_dict().items():
-    #         f.write(f"{k}: {v.shape}\n")
-    # with open("state_dict.txt", "w") as f:
-    #     for k, v in state_dict.items():
-    #         f.write(f"{k}: {v.shape}\n")
-    # load_pretrained_weights(model, weights_path, num_classes)
-    # print(model(torch.randn(1, 3, 640, 640)).shape)  # Test forward pass
+    print(model(torch.randn(1, 3, 640, 640)).shape)  # Test forward pass
