@@ -49,7 +49,7 @@ def train(num_classes = 4, num_epochs = 50, validate = True, batch_size = 16, ma
           logging = True, device="cuda", lr = 0.001, weight_decay = 0.0005):
     today = datetime.today()
     date_str = today.strftime("%m-%d_%H")
-    exp_name = f"yolox_s_ep{num_epochs}_bs{batch_size}_lr{lr:.0e}_wd{weight_decay:.0e}_{date_str}"
+    exp_name = f"yolox_s_nc{num_classes}_ep{num_epochs}_bs{batch_size}_lr{lr:.0e}_wd{weight_decay:.0e}_{date_str}"
     print(f"Experiment Name: {exp_name}")
 
     console = Console(record=True, force_terminal=True, width=110, height=1000,log_path=False)        # record=True lets us export later
@@ -76,10 +76,10 @@ def train(num_classes = 4, num_epochs = 50, validate = True, batch_size = 16, ma
         if k.startswith("backbone"):
             v.requires_grad = False
 
-    dataset = PPE_DATA(data_path="./data", mode="train",p_mosaic = 1 / batch_size, apply_transforms = True)
+    dataset = PPE_DATA(data_path="./data", mode="train",p_mosaic = 1 / batch_size, apply_transforms = True, include_eyewear = False)
     dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True, num_workers=4, pin_memory=True)
     if validate:
-        val_dataset = PPE_DATA(data_path="./data", mode="val")
+        val_dataset = PPE_DATA(data_path="./data", mode="val", include_eyewear=False)
         val_dataloader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, num_workers=4)
 
     loss_fn = YOLOXLoss(num_classes=num_classes)
@@ -293,4 +293,4 @@ if __name__ == "__main__":
     else:
         print("Using CPU for training")
         device = "cpu"
-    train(num_classes=4, num_epochs=200, validate=True, batch_size=32, max_gt=30, device=device, logging=True, lr = 0.0001)
+    train(num_classes=2, num_epochs=100, validate=True, batch_size=32, max_gt=30, device=device, logging=True, lr = 0.001)

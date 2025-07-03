@@ -24,7 +24,7 @@ class PPE_DATA(Dataset):
         
         self.max_gt = max_ground_truth_boxes
         self.p_mosaic = p_mosaic
-        self.mosaic = Mosaic()
+        self.mosaic = Mosaic(include_eyewear = include_eyewear)
 
         # a boolean of whether or not to apply transforms
         self.transforms = apply_transforms
