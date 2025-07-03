@@ -32,8 +32,8 @@ def main(weight_path, device = "cuda", validation = True):
         ids = [0, 16, 47, 98, 245]
         labels = [label1, label2, label3, label4, label5]
 
-    model = create_yolox_s(num_classes=4)
-    model = load_pretrained_weights(model, weight_path, num_classes=4, remap = False)
+    model = create_yolox_s(num_classes=2)
+    model = load_pretrained_weights(model, weight_path, num_classes=2, remap = False)
     if validation:
         model.eval().to(device)
         for id, img in zip(ids, images):
@@ -41,7 +41,7 @@ def main(weight_path, device = "cuda", validation = True):
             with torch.no_grad():
                 outputs = model(img)
             processed_preds = post_process_img(outputs[0], confidence_threshold=0.25, iou_threshold=0.5)
-            PPE_DATA.show_img(img.squeeze(0), processed_preds, f"output_images/post-augmentations/val_img{id}_200.png", 
+            PPE_DATA.show_img(img.squeeze(0), processed_preds, f"output_images/coat_only/val_img{id}_200.png", 
                             rect_coords_centered=False,
                             normalized = False,
                             show_conf_score=True)
@@ -61,6 +61,6 @@ def main(weight_path, device = "cuda", validation = True):
     print(f"successfully saved {len(ids)} images with predictions.")
 
 if __name__ == "__main__":
-    main("model_checkpoints/yolox_s_ep200_bs32_lr1e-03_wd5e-04_07-02_11.pth", device = "cuda",
+    main("model_checkpoints/yolox_s_nc2_ep100_bs32_lr1e-03_wd5e-04_07-02_15.pth", device = "cuda",
           validation = True)
         

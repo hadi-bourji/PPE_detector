@@ -61,6 +61,8 @@ class Mosaic(nn.Module):
             label = np.loadtxt(lbl_path, dtype=np.float32)
             if label.ndim == 1:
                 label = label.reshape(1, -1)
+        mask = label[:, 0] != 3 and label[:, 0] != 2  # remove eyewear labels
+        label = label[mask]
         return new_img, label
 
     def forward(self, img, labels, img_paths, output_size=640):
