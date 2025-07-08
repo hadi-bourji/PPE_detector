@@ -9,7 +9,7 @@ import numpy as np
 import torch.nn.functional as F
 start = time.time()
 print("Starting video capture...")
-cap = cv2.VideoCapture(0)
+cap = cv2.VideoCapture(0, cv2.CAP_DSHOW)
 if not cap.isOpened():
     print("Error: Could not open video.")
     exit()
@@ -68,7 +68,7 @@ while True:
     img = process_frame(frame, device)
     with torch.no_grad():
         outputs = model(img)
-        outputs = post_process_img(outputs[0], confidence_threshold=0.5, iou_threshold=0.5)
+        outputs = post_process_img(outputs[0], confidence_threshold=0.5, iou_threshold=0.5, use_batched_nms=False)
     img = img.squeeze(0)
     n = einops.rearrange(img, "c h w -> h w c").cpu().numpy().copy().astype(np.uint8)
     edge_colors = [(0,255,0),(0,0,255), (255,0,0), (0,255,255)]

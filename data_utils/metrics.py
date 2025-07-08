@@ -146,7 +146,7 @@ def calculate_mAP(img_ids: torch.Tensor, gts: torch.Tensor, preds: torch.Tensor,
 
     return total_ap / num_classes
 
-def post_process_img(output, confidence_threshold = 0.25, iou_threshold = 0.5, use_batched_nms = Tru) -> torch.Tensor:
+def post_process_img(output, confidence_threshold = 0.25, iou_threshold = 0.5, use_batched_nms = True) -> torch.Tensor:
     ''' This function expects the output to be in pixel values and sigmoid to already be applied
     to obj and class probabilities.'''
     x1 = output[..., 0:1] - output[..., 2:3] / 2
