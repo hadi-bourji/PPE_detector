@@ -60,7 +60,7 @@ def map_pretrained_weights(state_dict):
     
     return mapped_dict
 
-def load_pretrained_weights(model, weights_path, num_classes=None, remap = True, model_name = "yolox_s"):
+def load_pretrained_weights(model, weights_path, num_classes=None, remap = True):
     """
     Load pretrained weights into model, handling different number of classes
     

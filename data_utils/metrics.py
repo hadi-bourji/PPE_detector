@@ -1,5 +1,5 @@
 import torch
-from torchvision.ops import batched_nms
+from torchvision.ops import nms, batched_nms
 import matplotlib.pyplot as plt
 
 from .ppe_dataset import PPE_DATA
@@ -146,7 +146,7 @@ def calculate_mAP(img_ids: torch.Tensor, gts: torch.Tensor, preds: torch.Tensor,
 
     return total_ap / num_classes
 
-def post_process_img(output, confidence_threshold = 0.25, iou_threshold = 0.5) -> torch.Tensor:
+def post_process_img(output, confidence_threshold = 0.25, iou_threshold = 0.5, use_batched_nms = Tru) -> torch.Tensor:
     ''' This function expects the output to be in pixel values and sigmoid to already be applied
     to obj and class probabilities.'''
     x1 = output[..., 0:1] - output[..., 2:3] / 2
@@ -168,7 +168,10 @@ def post_process_img(output, confidence_threshold = 0.25, iou_threshold = 0.5) -
     best_scores = best_scores[mask] 
     best_class = best_class[mask] 
     boxes = boxes[mask]
-    keep = batched_nms(boxes, best_scores, best_class, iou_threshold = iou_threshold)
+    if use_batched_nms:
+        keep = batched_nms(boxes, best_scores, best_class, iou_threshold=iou_threshold)
+    else:
+        keep = nms(boxes, best_scores, iou_threshold = iou_threshold)
     final_boxes = boxes[keep]
     final_classes = best_class[keep]
     final_scores = best_scores[keep]

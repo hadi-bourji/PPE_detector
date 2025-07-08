@@ -1,6 +1,7 @@
 import cv2
 import torch
-from yolox.test_weights import create_yolox_s, load_pretrained_weights, download_weights, create_yolox_l
+from yolox.test_weights import load_pretrained_weights, download_weights 
+from yolox.model import create_yolox_s, create_yolox_l, create_yolox_m
 import einops
 from data_utils.metrics import post_process_img
 import time
@@ -8,7 +9,7 @@ import numpy as np
 import torch.nn.functional as F
 start = time.time()
 print("Starting video capture...")
-cap = cv2.VideoCapture(1)
+cap = cv2.VideoCapture(0)
 if not cap.isOpened():
     print("Error: Could not open video.")
     exit()
@@ -20,9 +21,18 @@ device = 'cuda' if torch.cuda.is_available() else 'cpu'
 print(f"Using device: {device}")
 
 num_classes = 4
-weight_path = 'model_checkpoints\\yolox_s_ep200_bs32_lr1e-03_wd5e-04_07-02_11.pth'
+
+#PPE 1000 300 ep:
+weight_path = "model_checkpoints\\yolox_m_nc4_ep300_bs8_lr1e-04_wd5e-04_07-08_10_ce100.pth"
+# weight_path = "model_checkpoints\\yolox_s_nc4_ep300_bs16_lr1e-04_wd5e-04_07-08_00.pth"
+
+# no eyewear 200ep
+# weight_path = "model_checkpoints\\yolox_s_nc2_ep200_bs32_lr1e-03_wd5e-04_07-03_12.pth"
+
+# regular, good yolo 200ep
+# weight_path = 'model_checkpoints\\yolox_s_ep200_bs32_lr1e-03_wd5e-04_07-02_11.pth'
 # weight_path = download_weights('yolox_s.pth')
-model = create_yolox_s(num_classes)
+model = create_yolox_m(num_classes)
 model = load_pretrained_weights(model, weight_path, num_classes, remap = False)
 model.to(device).eval()
 
@@ -61,7 +71,7 @@ while True:
         outputs = post_process_img(outputs[0], confidence_threshold=0.5, iou_threshold=0.5)
     img = img.squeeze(0)
     n = einops.rearrange(img, "c h w -> h w c").cpu().numpy().copy().astype(np.uint8)
-    edge_colors = [(0,0,255), (0,255,0), (255,0,0), (0,255,255)]
+    edge_colors = [(0,255,0),(0,0,255), (255,0,0), (0,255,255)]
     class_names = ["coat", "no-coat", "eyewear", "no-eyewear"]
     outputs = outputs.cpu().numpy()
     for label in outputs:

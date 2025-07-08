@@ -45,8 +45,12 @@ def make_table(metrics_history, num_rows_to_show=25):
     
     return table
 
+
+
 def train(num_classes = 4, num_epochs = 50, validate = True, batch_size = 16, max_gt=30, 
-          logging = True, device="cuda", lr = 0.001, weight_decay = 0.0005, save_epochs = [50, 100, 200, 250]):
+          logging = True, device="cuda", lr = 0.001, weight_decay = 0.0005, save_epochs = [50, 100, 200, 250],
+          use_amp = False):
+
     today = datetime.today()
     date_str = today.strftime("%m-%d_%H")
     exp_name = f"yolox_m_nc{num_classes}_ep{num_epochs}_bs{batch_size}_lr{lr:.0e}_wd{weight_decay:.0e}_{date_str}"
@@ -61,11 +65,11 @@ def train(num_classes = 4, num_epochs = 50, validate = True, batch_size = 16, ma
     SpinnerColumn(),
     "[progress.description]{task.description}",
     BarColumn(bar_width=None),
-    TaskProgressColumn(),                # x / total
+    TaskProgressColumn(),                
     TimeElapsedColumn(),
     TimeRemainingColumn(),
     console=console,
-    transient=True,                      # clear once finished
+    transient=True
     )
 
     weight_path = download_weights("yolox", model = "yolox_m")
@@ -83,32 +87,32 @@ def train(num_classes = 4, num_epochs = 50, validate = True, batch_size = 16, ma
         val_dataloader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, num_workers=8)
 
     loss_fn = YOLOXLoss(num_classes=num_classes)
-    # TODO try out weight decay and learning rate scheduler
     optimizer = AdamW(model.parameters(), lr=lr, weight_decay=weight_decay)
+    scaler = torch.amp.GradScaler(enabled=use_amp)  # for mixed precision training
 
     if logging:
         writer = SummaryWriter(log_dir=f"./logs/{exp_name}")
         writer.add_text("Hyperparameters", f"num_classes: {num_classes}, num_epochs: {num_epochs}, "
                                             f"batch_size: {batch_size}, max_gt: {max_gt}")
 
+    # wrap training loop in live environment to have rich printing
     with Live(console=console, refresh_per_second=2) as live:
 
         epoch_task = progress.add_task("Epochs", total=num_epochs)
         batch_task_id = None
         t0 = perf_counter()
+    
         for epoch in range(num_epochs):
-
+            
             # Unfreeze model parameters after 10 epochs, decrease learning rate
             if epoch == 10:
                 for k, v in model.named_parameters():
                     if k.startswith("backbone"):
                         v.requires_grad = True
 
-                
-            
+            # on the last 15 epochs just show the regular dataset
             if epoch == num_epochs - 15:
                dataset.transforms = False
-
             
             if batch_task_id is not None:          # remove previous batch bar
                 progress.remove_task(batch_task_id)
@@ -116,12 +120,11 @@ def train(num_classes = 4, num_epochs = 50, validate = True, batch_size = 16, ma
                 f"  [green]train batches", total=len(dataloader)
             )
 
-
-
             running_train_loss = 0.0
             running_train_box_loss = 0.0
             running_train_cls_loss = 0.0
             running_train_obj_loss = 0.0
+
             for batch in dataloader:
                 img, labels = batch
                 img = img.to(device)
@@ -130,11 +133,12 @@ def train(num_classes = 4, num_epochs = 50, validate = True, batch_size = 16, ma
                 # labels is shape (batch_size, max_gt, 5) where 5 is [c, cx, cy, w, h], all normalized
 
                 # Forward pass
-                # output shape: (batch, 8400, 9). Boxes are decoded to pixel space
+                # output shape: (batch, 8400, 9). Boxes are already decoded to pixel space
                 # but left in cx cy format
-                outputs = model(img)
+                with torch.autocast(device_type=device, dtype = torch.float16, enabled=use_amp):
+                    outputs = model(img)
+                    loss_dict = loss_fn(outputs, labels)
 
-                loss_dict = loss_fn(outputs, labels)
                 total_loss = loss_dict["total_loss"]
                 running_train_loss += total_loss.item()
                 running_train_box_loss += loss_dict["box_loss"]
@@ -143,8 +147,9 @@ def train(num_classes = 4, num_epochs = 50, validate = True, batch_size = 16, ma
     
                 # Backward pass and optimization
                 optimizer.zero_grad()
-                total_loss.backward()
-                optimizer.step()
+                scaler.scale(total_loss).backward()
+                scaler.step(optimizer)
+                scaler.update()
                 progress.advance(batch_task_id)
                 progress.advance(epoch_task, advance = 1 / (len(dataloader) + len(val_dataloader)))
 
@@ -171,8 +176,9 @@ def train(num_classes = 4, num_epochs = 50, validate = True, batch_size = 16, ma
                         img_ids, img, labels = img_ids.to(device), img.to(device), labels.to(device)
     
                         # Forward pass
-                        outputs = model(img)
-                        val_loss_dict = loss_fn(outputs, labels)
+                        with torch.autocast(device_type=device, dtype = torch.float16, enabled=use_amp):
+                            outputs = model(img)
+                            val_loss_dict = loss_fn(outputs, labels)
                         val_loss = val_loss_dict["total_loss"]
     
                         running_val_loss += val_loss
@@ -202,12 +208,12 @@ def train(num_classes = 4, num_epochs = 50, validate = True, batch_size = 16, ma
             val_loss = running_val_loss / len(val_dataloader)
             metrics_history.append({"epoch": epoch, "train_loss": train_loss, "val_loss": val_loss,
                                     "mAP": mAP,
-                                    "train_cls_loss": running_train_cls_loss / len(dataloader),
-                                    "train_box_loss": running_train_box_loss / len(dataloader),
-                                    "train_obj_loss": running_train_obj_loss / len(dataloader),
-                                    "val_cls_loss": running_val_cls_loss / len(val_dataloader),
-                                    "val_box_loss": running_val_box_loss / len(val_dataloader),
-                                    "val_obj_loss": running_val_obj_loss / len(val_dataloader)}
+                                    "train_cls_loss": (running_train_cls_loss / len(dataloader)).item(),
+                                    "train_box_loss": (running_train_box_loss / len(dataloader)).item(),
+                                    "train_obj_loss": (running_train_obj_loss / len(dataloader)).item(),
+                                    "val_cls_loss": (running_val_cls_loss / len(val_dataloader)).item(),
+                                    "val_box_loss": (running_val_box_loss / len(val_dataloader)).item(),
+                                    "val_obj_loss": (running_val_obj_loss / len(val_dataloader)).item()}
                                     )
             live.update(Group(progress, make_table(metrics_history, num_rows_to_show)), refresh=True)
                 
@@ -285,4 +291,5 @@ if __name__ == "__main__":
     else:
         print("Using CPU for training")
         device = "cpu"
-    train(num_classes=4, num_epochs=300, validate=True, batch_size=8, max_gt=30, device=device, logging=True, lr = 0.0001)
+    train(num_classes=4, num_epochs=300, validate=True, batch_size=8, 
+          max_gt=30, device=device, logging=False, lr = 0.0001, use_amp = True)
