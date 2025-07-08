@@ -9,3 +9,6 @@ model_checkpoints/
 # logs_rich/
 inference_imgs/
 data_aug/
+*.png
+*.jpg
+*.jpeg

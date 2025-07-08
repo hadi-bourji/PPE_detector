@@ -49,12 +49,13 @@ def make_table(metrics_history, num_rows_to_show=25):
 
 def train(num_classes = 4, num_epochs = 50, validate = True, batch_size = 16, max_gt=30, 
           logging = True, device="cuda", lr = 0.001, weight_decay = 0.0005, save_epochs = [50, 100, 200, 250],
-          use_amp = False):
+          use_amp = True):
 
     today = datetime.today()
     date_str = today.strftime("%m-%d_%H")
-    exp_name = f"yolox_m_nc{num_classes}_ep{num_epochs}_bs{batch_size}_lr{lr:.0e}_wd{weight_decay:.0e}_{date_str}"
+    exp_name = f"yolox_m_ua{use_amp}_nc{num_classes}_ep{num_epochs}_bs{batch_size}_lr{lr:.0e}_wd{weight_decay:.0e}_{date_str}"
     print(f"Experiment Name: {exp_name}")
+    print("using amp: ", use_amp)
 
     console = Console(record=True, force_terminal=True, width=110, height=1000,log_path=False)        # record=True lets us export later
     metrics_history = []
