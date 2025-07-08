@@ -46,7 +46,7 @@ def make_table(metrics_history, num_rows_to_show=25):
     return table
 
 def train(num_classes = 4, num_epochs = 50, validate = True, batch_size = 16, max_gt=30, 
-          logging = True, device="cuda", lr = 0.001, weight_decay = 0.0005):
+          logging = True, device="cuda", lr = 0.001, weight_decay = 0.0005, save_epochs = [50, 100, 200, 250]):
     today = datetime.today()
     date_str = today.strftime("%m-%d_%H")
     exp_name = f"yolox_s_nc{num_classes}_ep{num_epochs}_bs{batch_size}_lr{lr:.0e}_wd{weight_decay:.0e}_{date_str}"
@@ -77,14 +77,14 @@ def train(num_classes = 4, num_epochs = 50, validate = True, batch_size = 16, ma
             v.requires_grad = False
 
     dataset = PPE_DATA(data_path="./data", mode="train",p_mosaic = 1 / batch_size, apply_transforms = True)
-    dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True, num_workers=4, pin_memory=True)
+    dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True, num_workers=8, pin_memory=True)
     if validate:
         val_dataset = PPE_DATA(data_path="./data", mode="val")
-        val_dataloader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, num_workers=4)
+        val_dataloader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, num_workers=8)
 
     loss_fn = YOLOXLoss(num_classes=num_classes)
     # TODO try out weight decay and learning rate scheduler
-    optimizer = AdamW(model.parameters(), lr=0.001, weight_decay=weight_decay)
+    optimizer = AdamW(model.parameters(), lr=lr, weight_decay=weight_decay)
 
     if logging:
         writer = SummaryWriter(log_dir=f"./logs/{exp_name}")
@@ -106,8 +106,8 @@ def train(num_classes = 4, num_epochs = 50, validate = True, batch_size = 16, ma
 
                 
             
-            #if epoch == num_epochs - 10:
-            #    dataset.transforms = False
+            if epoch == num_epochs - 10:
+               dataset.transforms = False
 
             
             if batch_task_id is not None:          # remove previous batch bar
@@ -155,7 +155,6 @@ def train(num_classes = 4, num_epochs = 50, validate = True, batch_size = 16, ma
                     completed=0,
                     total=len(val_dataloader),
                 )
-                # model.eval()
                 with torch.no_grad():
                     
                     all_img_ids = torch.empty(0, dtype=torch.int64).to(device)
@@ -198,16 +197,6 @@ def train(num_classes = 4, num_epochs = 50, validate = True, batch_size = 16, ma
                 )
             batch_task_id = None
                 
-            # mAP = 0.0  # Placeholder for mAP, replace with actual calculation if needed
-            # running_val_loss = 0.0
-            # running_val_box_loss = 0.0
-            # running_val_cls_loss = 0.0
-            # running_val_obj_loss = 0.0
-            # running_train_loss = 0.0
-            # running_train_box_loss = 0.0
-            # running_train_cls_loss = 0.0
-            # running_train_obj_loss = 0.0
-
             # Compute metrics
             train_loss = running_train_loss / len(dataloader)
             val_loss = running_val_loss / len(val_dataloader)
@@ -236,7 +225,7 @@ def train(num_classes = 4, num_epochs = 50, validate = True, batch_size = 16, ma
                     writer.add_scalar("BCE Loss/Val", running_val_cls_loss / len(val_dataloader), epoch)
                     writer.add_scalar("IoU Loss/Val", running_val_box_loss / len(val_dataloader), epoch)
                     writer.add_scalar("Objectness Loss/Val", running_val_obj_loss / len(val_dataloader), epoch)
-            if (epoch + 1) % 50 == 0:
+            if (epoch + 1) in save_epochs == 0:
                 torch.save(model.state_dict(), f"model_checkpoints/{exp_name}_ce{epoch+1}.pth")
 
     console.print("[bold green] Training Complete")
@@ -295,4 +284,4 @@ if __name__ == "__main__":
     else:
         print("Using CPU for training")
         device = "cpu"
-    train(num_classes=4, num_epochs=50, validate=True, batch_size=32, max_gt=30, device=device, logging=True, lr = 0.001)
+    train(num_classes=4, num_epochs=300, validate=True, batch_size=16, max_gt=30, device=device, logging=True, lr = 0.0001)
