@@ -124,6 +124,41 @@ class YOLOXl(YOLOX):
         
         super().__init__(backbone, neck, head)
 
+class YOLOXm(YOLOX):
+
+    def __init__(self, num_classes = 80):
+        # YOLOX-m specific parameters
+        depth = 0.67
+        width = 0.75
+
+        backbone = CSPDarknet(
+            dep_mul=depth,
+            wid_mul=width,
+            out_features=("dark3", "dark4", "dark5"),
+            depthwise=False,
+            act="silu"
+        )
+        
+        neck = YOLOPAFPN(
+            depth=depth,
+            width=width,
+            in_features=("dark3", "dark4", "dark5"),
+            in_channels=[256, 512, 1024],
+            depthwise=False,
+            act="silu"
+        )
+        
+        head = YOLOXHead(
+            num_classes=num_classes,
+            width=width,
+            strides=[8, 16, 32],
+            in_channels=[256, 512, 1024],
+            act="silu",
+            depthwise=False
+        )
+        
+        super().__init__(backbone, neck, head)
+
 def create_yolox_s(num_classes=80):
     """Create YOLOX-s model"""
     model = YOLOXs(num_classes=num_classes)
@@ -133,6 +168,12 @@ def create_yolox_s(num_classes=80):
 def create_yolox_l(num_classes=80):
     """Create YOLOX-s model"""
     model = YOLOXl(num_classes=num_classes)
+    model.init_weights()
+    return model
+
+def create_yolox_m(num_classes=80):
+    """Create YOLOX-s model"""
+    model = YOLOXm(num_classes=num_classes)
     model.init_weights()
     return model
 

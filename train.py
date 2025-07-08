@@ -1,7 +1,7 @@
 import torch
 from torch.utils.data import DataLoader
 from yolox.test_weights import download_weights, load_pretrained_weights
-from yolox.model import create_yolox_s, create_yolox_l
+from yolox.model import create_yolox_s, create_yolox_l, create_yolox_m
 from data_utils.ppe_dataset import PPE_DATA
 from yolox.loss import YOLOXLoss
 from torch.optim import AdamW
@@ -49,7 +49,7 @@ def train(num_classes = 4, num_epochs = 50, validate = True, batch_size = 16, ma
           logging = True, device="cuda", lr = 0.001, weight_decay = 0.0005, save_epochs = [50, 100, 200, 250]):
     today = datetime.today()
     date_str = today.strftime("%m-%d_%H")
-    exp_name = f"yolox_s_nc{num_classes}_ep{num_epochs}_bs{batch_size}_lr{lr:.0e}_wd{weight_decay:.0e}_{date_str}"
+    exp_name = f"yolox_m_nc{num_classes}_ep{num_epochs}_bs{batch_size}_lr{lr:.0e}_wd{weight_decay:.0e}_{date_str}"
     print(f"Experiment Name: {exp_name}")
 
     console = Console(record=True, force_terminal=True, width=110, height=1000,log_path=False)        # record=True lets us export later
@@ -67,13 +67,13 @@ def train(num_classes = 4, num_epochs = 50, validate = True, batch_size = 16, ma
     console=console,
     transient=True,                      # clear once finished
     )
-    # dataset and viz functions are only configured for 4 classes anyway
-    weight_path = download_weights("yolox/yolox_s.pth", model = "yolox_s")
-    model = create_yolox_s(num_classes)
+
+    weight_path = download_weights("yolox", model = "yolox_m")
+    model = create_yolox_m(num_classes)
     model = load_pretrained_weights(model, weight_path, num_classes)
     model.train().to(device)
     for k, v in model.named_parameters():
-        if k.startswith("backbone"):
+       if k.startswith("backbone"):
             v.requires_grad = False
 
     dataset = PPE_DATA(data_path="./data", mode="train",p_mosaic = 1 / batch_size, apply_transforms = True)
@@ -106,7 +106,7 @@ def train(num_classes = 4, num_epochs = 50, validate = True, batch_size = 16, ma
 
                 
             
-            if epoch == num_epochs - 10:
+            if epoch == num_epochs - 15:
                dataset.transforms = False
 
             
@@ -225,7 +225,8 @@ def train(num_classes = 4, num_epochs = 50, validate = True, batch_size = 16, ma
                     writer.add_scalar("BCE Loss/Val", running_val_cls_loss / len(val_dataloader), epoch)
                     writer.add_scalar("IoU Loss/Val", running_val_box_loss / len(val_dataloader), epoch)
                     writer.add_scalar("Objectness Loss/Val", running_val_obj_loss / len(val_dataloader), epoch)
-            if (epoch + 1) in save_epochs == 0:
+                    
+            if (epoch + 1) in save_epochs:
                 torch.save(model.state_dict(), f"model_checkpoints/{exp_name}_ce{epoch+1}.pth")
 
     console.print("[bold green] Training Complete")
@@ -284,4 +285,4 @@ if __name__ == "__main__":
     else:
         print("Using CPU for training")
         device = "cpu"
-    train(num_classes=4, num_epochs=300, validate=True, batch_size=16, max_gt=30, device=device, logging=True, lr = 0.0001)
+    train(num_classes=4, num_epochs=300, validate=True, batch_size=8, max_gt=30, device=device, logging=True, lr = 0.0001)

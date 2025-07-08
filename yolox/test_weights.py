@@ -10,22 +10,24 @@ import requests
 from .model import create_yolox_s, create_yolox_l
 
 
-def download_weights(save_path="yolox_s.pth", model = "yolox_s"):
+def download_weights(save_path="./", model = "yolox_s"):
     """Download YOLOX-s weights if not exists"""
+    
+    save_path =os.path.join(save_path, f"{model}.pth") 
     if os.path.exists(save_path):
         return save_path
-    
     if model == "yolox_s":
         url = "https://github.com/Megvii-BaseDetection/YOLOX/releases/download/0.1.1rc0/yolox_s.pth"
     elif model == "yolox_l":
         url = "https://github.com/Megvii-BaseDetection/YOLOX/releases/download/0.1.1rc0/yolox_l.pth"
-    else:
-        raise ValueError("Unsupported model type. Use 'yolox_s' or 'yolox_l'.")
+    elif model == "yolox_m":
+        url = "https://github.com/Megvii-BaseDetection/YOLOX/releases/download/0.1.1rc0/yolox_m.pth"
     print(f"Downloading weights from {url}")
     
     response = requests.get(url, stream=True)
     response.raise_for_status()
-    
+
+    print("saving to: ", save_path)
     with open(save_path, 'wb') as f:
         for chunk in response.iter_content(chunk_size=8192):
             if chunk:
@@ -58,7 +60,7 @@ def map_pretrained_weights(state_dict):
     
     return mapped_dict
 
-def load_pretrained_weights(model, weights_path, num_classes=None, remap = True):
+def load_pretrained_weights(model, weights_path, num_classes=None, remap = True, model_name = "yolox_s"):
     """
     Load pretrained weights into model, handling different number of classes
     
