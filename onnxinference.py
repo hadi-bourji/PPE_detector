@@ -7,14 +7,18 @@ from data_utils.metrics import post_process_img
 import time
 import numpy as np
 import torch.nn.functional as F
+import onnxruntime as ort
 start = time.time()
 print("Starting video capture...")
 cap = cv2.VideoCapture(0, cv2.CAP_DSHOW)
+cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
+cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
 if not cap.isOpened():
     print("Error: Could not open video.")
     exit()
 
 print(f"Video opened successfully after {time.time() - start:.2f} seconds.")
+ort_session = ort.InferenceSession("onnx\\yolox_s_nc4_ep300_bs16_lr1e-04_wd5e-04_07-08_00.onnx")
 
 # coat, no-coat, eyewear, no-eyewear
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
@@ -22,39 +26,18 @@ print(f"Using device: {device}")
 
 num_classes = 4
 
-# weight_path = "model_checkpoints/yolox_m_uaTrue_nc4_ep15_bs8_lr1e-04_wd5e-04_07-08_14.pth"
-#PPE 1000 300 ep:
-# BEST MODEL
-weight_path = "model_checkpoints\\yolox_m_nc4_ep300_bs8_lr1e-04_wd5e-04_07-08_10_ce100.pth"
-# weight_path = "model_checkpoints\\yolox_s_nc4_ep300_bs16_lr1e-04_wd5e-04_07-08_00.pth"
-
-# no eyewear 200ep
-# weight_path = "model_checkpoints\\yolox_s_nc2_ep200_bs32_lr1e-03_wd5e-04_07-03_12.pth"
-
-# regular, good yolo 200ep
-# weight_path = 'model_checkpoints\\yolox_s_ep200_bs32_lr1e-03_wd5e-04_07-02_11.pth'
-# weight_path = download_weights('yolox_s.pth')
-model = create_yolox_m(num_classes)
-model = load_pretrained_weights(model, weight_path, num_classes, remap = False)
-model.to(device).eval()
 
 def process_frame(frame, device = 'cuda', output_size = 640):
     # Preprocess the frame for YOLOX
     img = einops.rearrange(frame, 'h w c -> c h w')  # Change to CHW format
     img = torch.from_numpy(img).float().to(device)
 
-    height, width = img.shape[1:]
-    scale = min(output_size / width, output_size / height)
-
-    new_width, new_height = int(width * scale), int(height * scale)
-    img = F.interpolate(img.unsqueeze(0), size=(new_height, new_width), mode='bilinear', align_corners=False)
 
     # pad with grey (114, 114, 114), not normalized
-    pad_top = (output_size - new_height) // 2
-    pad_bottom = output_size - new_height - pad_top
-    pad_left = (output_size - new_width) // 2
-    pad_right = output_size - new_width - pad_left        
-
+    pad_top = (output_size - 480) // 2
+    pad_bottom = output_size - 480 - pad_top
+    pad_left = (output_size - 640) // 2
+    pad_right = output_size - 640 - pad_left
     img = F.pad(img, (pad_left, pad_right, pad_top, pad_bottom), value = 114.0)
     return img, (pad_top, pad_bottom, pad_left, pad_right)
 
@@ -68,11 +51,13 @@ while True:
     frame_count += 1
     img, pads = process_frame(frame, device)
     with torch.no_grad():
-        outputs = model(img)
+        img.unsqueeze_(0)  # Add batch dimension
+        outputs = ort_session.run(None, {ort_session.get_inputs()[0].name: img.cpu().numpy()})
+        outputs = torch.tensor(outputs)
         outputs = post_process_img(outputs[0], confidence_threshold=0.5, iou_threshold=0.5, use_batched_nms=False)
     img = img.squeeze(0)
     n = einops.rearrange(img, "c h w -> h w c").cpu().numpy().copy().astype(np.uint8)
-    edge_colors = [(0,255,0),(0,0,255), (255,255,0), (0,255,255)]
+    edge_colors = [(0,255,0),(0,0,255), (255,0,0), (0,255,255)]
     class_names = ["coat", "no-coat", "eyewear", "no-eyewear"]
     outputs = outputs.cpu().numpy()
     for label in outputs:
@@ -101,12 +86,11 @@ while True:
     if frame_count % 30 == 0:
         elapsed_time = time.time() - start
         fps = frame_count / elapsed_time
+    if (frame_count + 1) % 100 == 0:
+        cv2.imwrite(f'output_image_{frame_count}.jpg', n) 
         print(f"Avg. FPS: {fps:.2f}")
     # Display the frame
     cv2.imshow('Frame', n)
 
     if cv2.waitKey(1) & 0xFF == ord('q'):
         break
-
-cap.release()
-cv2.destroyAllWindows()

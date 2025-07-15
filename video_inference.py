@@ -9,7 +9,14 @@ import numpy as np
 import torch.nn.functional as F
 start = time.time()
 print("Starting video capture...")
-cap = cv2.VideoCapture(0, cv2.CAP_DSHOW)
+video_path = "3-Camera_01_Eurofins_NVR_woxdfb_20250714104500_20250714104602_132352.mp4"
+cap = cv2.VideoCapture(video_path)
+fps = cap.get(cv2.CAP_PROP_FPS)
+fourcc = cv2.VideoWriter_fourcc(*"mp4v")
+out = cv2.VideoWriter("output_video_half.mp4", fourcc, 10, (640, 640-280))
+if not out.isOpened():
+    raise RuntimeError("failed to open video writer")
+
 if not cap.isOpened():
     print("Error: Could not open video.")
     exit()
@@ -63,16 +70,17 @@ start = time.time()
 while True:
     ret, frame = cap.read()
     if not ret:
-        print("Error: Could not read frame.")
         break
     frame_count += 1
+    if frame_count % 2 == 0:
+        continue
     img, pads = process_frame(frame, device)
     with torch.no_grad():
         outputs = model(img)
         outputs = post_process_img(outputs[0], confidence_threshold=0.5, iou_threshold=0.5, use_batched_nms=False)
     img = img.squeeze(0)
     n = einops.rearrange(img, "c h w -> h w c").cpu().numpy().copy().astype(np.uint8)
-    edge_colors = [(0,255,0),(0,0,255), (255,255,0), (0,255,255)]
+    edge_colors = [(0,255,0),(0,0,255), (255, 255, 0), (0,255,255)]
     class_names = ["coat", "no-coat", "eyewear", "no-eyewear"]
     outputs = outputs.cpu().numpy()
     for label in outputs:
@@ -101,12 +109,12 @@ while True:
     if frame_count % 30 == 0:
         elapsed_time = time.time() - start
         fps = frame_count / elapsed_time
-        print(f"Avg. FPS: {fps:.2f}")
     # Display the frame
-    cv2.imshow('Frame', n)
-
-    if cv2.waitKey(1) & 0xFF == ord('q'):
+    cropped = n[140:640-140, :, :]
+    out.write(cropped)
+    if frame_count == 100:
         break
-
+print("finished")
 cap.release()
+out.release()
 cv2.destroyAllWindows()

@@ -12,3 +12,5 @@ data_aug/
 *.png
 *.jpg
 *.jpeg
+onnx/
+*.mp4
