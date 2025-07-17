@@ -25,10 +25,10 @@ num_classes = 6
 
 # weight_path = "model_checkpoints/yolox_m_uaTrue_nc4_ep15_bs8_lr1e-04_wd5e-04_07-08_14.pth"
 # with gloves
-# weight_path = "model_checkpoints\\yolox_m_uaTrue_nc6_ep200_bs8_lr1e-04_wd5e-04_07-15_19_ce150.pth"
+weight_path = "model_checkpoints\\yolox_m_uaTrue_nc6_ep200_bs8_lr1e-04_wd5e-04_07-15_19_ce150.pth"
 #PPE 1000 300 ep:
 # BEST MODEL
-weight_path = "model_checkpoints\\yolox_m_nc4_ep300_bs8_lr1e-04_wd5e-04_07-08_10_ce100.pth"
+# weight_path = "model_checkpoints\\yolox_m_nc4_ep300_bs8_lr1e-04_wd5e-04_07-08_10_ce100.pth"
 # weight_path = "model_checkpoints\\yolox_s_nc4_ep300_bs16_lr1e-04_wd5e-04_07-08_00.pth"
 
 # no eyewear 200ep
