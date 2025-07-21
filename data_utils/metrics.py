@@ -70,6 +70,7 @@ def calculate_AP_per_class(gt, preds, gt_to_img, preds_to_img, iou_thresh, devic
     fp_cumsum = torch.cumsum(fp, dim=0)
     precision = tp_cumsum / (tp_cumsum + fp_cumsum + 1e-9)
     recall = tp_cumsum / (float(num_gt) + 1e-9)
+    
 
     # how precision recall curve should be calculated, according to chat
     mrec = torch.cat([torch.tensor([0.], device=recall.device),
@@ -100,11 +101,12 @@ def calculate_AP_per_class(gt, preds, gt_to_img, preds_to_img, iou_thresh, devic
         plt.legend()
         plt.savefig(f"output_images/class_{class_names[class_id]}_pr_curve.png")
         print("saved plt")
-    return ap
+    return ap, precision[-1].item(), recall[-1].item()  # return AP, precision at 1.0 recall, and recall at 1.0 precision
 
 # gt is a list of the ground truth boxes, preds is a list of predicted boxes+confidence
 def calculate_mAP(img_ids: torch.Tensor, gts: torch.Tensor, preds: torch.Tensor, 
-                  num_classes = 4, iou_thresh = 0.5, device = "cuda", plot_pr = False):
+                  num_classes = 4, iou_thresh = 0.5, device = "cuda", plot_pr = False, writer = None, 
+                  epoch = 0):
 
     # a mapping from ground truth boxes to their img id
     # used to ensure predictions are being compared only to the same image
@@ -133,17 +135,29 @@ def calculate_mAP(img_ids: torch.Tensor, gts: torch.Tensor, preds: torch.Tensor,
     preds_to_img = preds_to_img[order]
 
     total_ap = 0
+    classes = ["coat", "no-coat", "eyewear", "no-eyewear", "gloves", "no-gloves"]
+    total_precision = 0.0
+    total_recall = 0.0
     for i in range(num_classes):
         idx = torch.tensor([i], device=device)
         gt_class_mask = true_gt[:, 0] == idx
         pred_class_mask = final_preds[:, 0] == idx
         if not gt_class_mask.any() and not pred_class_mask.any():
             continue
-        AP = calculate_AP_per_class(true_gt[gt_class_mask], final_preds[pred_class_mask], 
+        AP, precision, recall = calculate_AP_per_class(true_gt[gt_class_mask], final_preds[pred_class_mask], 
                                gt_to_img[gt_class_mask], preds_to_img[pred_class_mask],
                                iou_thresh, device=device, plot_pr=plot_pr, class_id=i)
+        if writer is not None:
+            writer.add_scalar(f"AP/{classes[i]}", AP, global_step=epoch)
+            writer.add_scalar(f"Precision/{classes[i]}", precision, global_step=epoch)
+            writer.add_scalar(f"Recall/{classes[i]}", recall, global_step=epoch)
         total_ap += AP
+        total_precision += precision
+        total_recall += recall
 
+    if writer is not None:
+        writer.add_scalar("Precision/Overall", total_precision / num_classes, global_step=epoch)
+        writer.add_scalar("Recall/Overall", total_recall / num_classes, global_step=epoch)
     return total_ap / num_classes
 
 def post_process_img(output, confidence_threshold = 0.25, iou_threshold = 0.5, use_batched_nms = True) -> torch.Tensor:

@@ -2,7 +2,8 @@ import torch
 from yolox.model import create_yolox_s
 from yolox.test_weights import load_pretrained_weights
 
-model = create_yolox_s(num_classes=4)
+num_classes = 4
+model = create_yolox_s(num_classes=num_classes)
 weights = "model_checkpoints\\yolox_s_nc4_ep300_bs16_lr1e-04_wd5e-04_07-08_00.pth"
 model = load_pretrained_weights(model, weights, remap=False)
 

@@ -203,6 +203,8 @@ def train(num_classes = 4, num_epochs = 50, validate = True, batch_size = 16, ma
                     all_preds, 
                     iou_thresh=0.5, 
                     num_classes=num_classes
+                    writer = writer if logging else None,
+                    epoch = epoch if logging else 0,
                 )
             batch_task_id = None
                 
