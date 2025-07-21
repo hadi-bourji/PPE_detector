@@ -50,11 +50,11 @@ def make_table(metrics_history, num_rows_to_show=25):
 
 def train(num_classes = 4, num_epochs = 50, validate = True, batch_size = 16, max_gt=30, 
           logging = True, device="cuda", lr = 0.001, weight_decay = 0.0005, save_epochs = [50, 100, 200, 250],
-          use_amp = True):
+          use_amp = True, model_name = "yolox_m"):
 
     today = datetime.today()
     date_str = today.strftime("%m-%d_%H")
-    exp_name = f"yolox_m_ua{use_amp}_nc{num_classes}_ep{num_epochs}_bs{batch_size}_lr{lr:.0e}_wd{weight_decay:.0e}_{date_str}"
+    exp_name = f"{model_name}_ua{use_amp}_nc{num_classes}_ep{num_epochs}_bs{batch_size}_lr{lr:.0e}_wd{weight_decay:.0e}_{date_str}"
     print(f"Experiment Name: {exp_name}")
     print("using amp: ", use_amp)
 
@@ -75,13 +75,20 @@ def train(num_classes = 4, num_epochs = 50, validate = True, batch_size = 16, ma
     )
 
     # weight_path = download_weights("yolox", model = "yolox_m")
-    weight_path = os.path.join("yolox", "yolox_m.pth")
-    model = create_yolox_m(num_classes)
+
+    if model_name == "yolox_m":
+        weight_path = os.path.join("yolox", "yolox_m.pth")
+        model = create_yolox_m(num_classes)
+    elif model_name == "yolox_s":
+        weight_path = os.path.join("yolox", "yolox_s.pth")
+        model = create_yolox_s(num_classes)
+    else:
+        raise Exception("model name must be yolox_m or yolox_s")
     model = load_pretrained_weights(model, weight_path, num_classes= num_classes)
     model.train().to(device)
-    # for k, v in model.named_parameters():
-    #    if k.startswith("backbone"):
-    #         v.requires_grad = False
+    for k, v in model.named_parameters():
+         if k.startswith("backbone"):
+            v.requires_grad = False
 
     dataset = PPE_DATA(data_path="./data", mode="train",p_mosaic = 1 / batch_size, apply_transforms = False)
     dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True, num_workers=8, pin_memory=True)
@@ -108,10 +115,10 @@ def train(num_classes = 4, num_epochs = 50, validate = True, batch_size = 16, ma
         for epoch in range(num_epochs):
             
             # Unfreeze model parameters after 10 epochs, decrease learning rate
-            # if epoch == 10:
-            #     for k, v in model.named_parameters():
-            #         if k.startswith("backbone"):
-            #             v.requires_grad = True
+            if epoch == 10:
+                for k, v in model.named_parameters():
+                    if k.startswith("backbone"):
+                        v.requires_grad = True
 
             # on the last 15 epochs just show the regular dataset
             if epoch == num_epochs - 15:
@@ -292,4 +299,10 @@ if __name__ == "__main__":
     device = "cuda" if torch.cuda.is_available() else "cpu"
     print(f"Using device: {device}")
     train(num_classes=6, num_epochs=300, validate=True, batch_size=8, 
-          max_gt=30, device=device, logging=True, lr = 0.0001, save_epochs = [50, 100, 150, 200, 250], use_amp = False)
+          max_gt=30, device=device, logging=True, lr = 0.0001, save_epochs = [50, 100, 150, 200, 250], use_amp = True, model_name = "yolox_m")
+    train(num_classes=6, num_epochs=300, validate=True, batch_size=8, 
+          max_gt=30, device=device, logging=True, lr = 0.0001, save_epochs = [50, 100, 150, 200, 250], use_amp = True, model_name = "yolox_s")
+    train(num_classes=6, num_epochs=300, validate=True, batch_size=8, 
+          max_gt=30, device=device, logging=True, lr = 0.0001, save_epochs = [50, 100, 150, 200, 250], use_amp = False, model_name = "yolox_m")
+    train(num_classes=6, num_epochs=300, validate=True, batch_size=8, 
+          max_gt=30, device=device, logging=True, lr = 0.0001, save_epochs = [50, 100, 150, 200, 250], use_amp = False, model_name = "yolox_s")
