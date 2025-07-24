@@ -373,21 +373,21 @@ def main():
         
         # ---------------------------------------------------------------------- #
 
-        # processed_preds_ppe = post_process_img(
-        #     preds_ppe[0], confidence_threshold=CONF_TH, iou_threshold=IOU_TH
-        # ).cpu().numpy()
+        processed_preds_ppe = post_process_img(
+            preds_ppe[0], confidence_threshold=CONF_TH, iou_threshold=IOU_TH
+        ).cpu().numpy()
 
-        # if processed_preds_ppe.any():
-        #     processed_preds_ppe[..., 2] = processed_preds_ppe[..., 2] - 80
-        #     processed_preds_ppe[..., 4] = processed_preds_ppe[..., 4] - 80
+        if processed_preds_ppe.any():
+            processed_preds_ppe[..., 2] = processed_preds_ppe[..., 2] - 80
+            processed_preds_ppe[..., 4] = processed_preds_ppe[..., 4] - 80
 
-        # processed_preds_reg = post_process_img(
-        #     preds_reg[0], confidence_threshold=CONF_TH, iou_threshold=IOU_TH
-        # ).cpu().numpy()
+        processed_preds_reg = post_process_img(
+            preds_reg[0], confidence_threshold=CONF_TH, iou_threshold=IOU_TH
+        ).cpu().numpy()
  
-        # if processed_preds_reg.any():
-        #     processed_preds_reg[..., 2] = processed_preds_reg[..., 2] - 80
-        #     processed_preds_reg[..., 4] = processed_preds_reg[..., 4] - 80
+        if processed_preds_reg.any():
+            processed_preds_reg[..., 2] = processed_preds_reg[..., 2] - 80
+            processed_preds_reg[..., 4] = processed_preds_reg[..., 4] - 80
 
         vis = draw_ppe(frame, processed_preds_ppe)       # draw on original BGR frame
         vis = draw_reg_yolo(frame, processed_preds_reg)
