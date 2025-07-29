@@ -14,3 +14,8 @@ data_aug/
 *.jpeg
 onnx/
 *.mp4
+model_checkpoints_old/
+logs/
+logs_old
+logs_rich/
+logs_rich_old/

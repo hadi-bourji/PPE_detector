@@ -14,13 +14,18 @@ class PPE_DATA(Dataset):
                  max_ground_truth_boxes=30, p_mosaic = 1/32, apply_transforms=False, 
                  include_eyewear = True):
         # read file names from train.txt or validation.txt file
+        # data_path is either a path to your train/val directory or a direct path to a file 
+        #TODO clean this up
         self.mode = mode
-        if mode == "train":
-            self.file_names = np.genfromtxt(f"{data_path}/train.txt", dtype=str, delimiter="\n")
-        elif mode == "val":
-            self.file_names = np.genfromtxt(f"{data_path}/validation.txt", dtype=str, delimiter="\n")
+        if os.path.isfile(data_path):
+            self.file_names = np.genfromtxt(f"{data_path}", dtype=str, delimiter="\n")
         else:
-            raise Exception("Invalid Mode Entered")
+            if mode == "train":
+                self.file_names = np.genfromtxt(f"{data_path}/train.txt", dtype=str, delimiter="\n")
+            elif mode == "val":
+                self.file_names = np.genfromtxt(f"{data_path}/validation.txt", dtype=str, delimiter="\n")
+            else:
+                raise Exception("Invalid Mode Entered")
         
         self.max_gt = max_ground_truth_boxes
         self.p_mosaic = p_mosaic
@@ -220,4 +225,3 @@ if __name__ == "__main__":
     index = int(random.random() * len(dataset))
     print(index)
     img, labels = dataset.__getitem__(index)
-    PPE_DATA.show_img(img, labels, output_path="output_images/output.png")

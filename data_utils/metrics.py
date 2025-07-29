@@ -70,7 +70,6 @@ def calculate_AP_per_class(gt, preds, gt_to_img, preds_to_img, iou_thresh, devic
     fp_cumsum = torch.cumsum(fp, dim=0)
     precision = tp_cumsum / (tp_cumsum + fp_cumsum + 1e-9)
     recall = tp_cumsum / (float(num_gt) + 1e-9)
-    
 
     # how precision recall curve should be calculated, according to chat
     mrec = torch.cat([torch.tensor([0.], device=recall.device),
@@ -101,7 +100,11 @@ def calculate_AP_per_class(gt, preds, gt_to_img, preds_to_img, iou_thresh, devic
         #plt.legend()
         #plt.savefig(f"output_images/class_{class_names[class_id]}_pr_curve.png")
         print("saved plt")
-    return ap, precision[-1].item(), recall[-1].item()  # return AP, precision at 1.0 recall, and recall at 1.0 precision
+    TP = tp.sum().item()
+    FP = fp.sum().item()
+    precision_item = TP / (TP + FP + 1e-9)
+    recall_item = TP / (num_gt + 1e-9)
+    return ap, precision_item, recall_item
 
 # gt is a list of the ground truth boxes, preds is a list of predicted boxes+confidence
 def calculate_mAP(img_ids: torch.Tensor, gts: torch.Tensor, preds: torch.Tensor, 
