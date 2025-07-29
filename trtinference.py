@@ -4,7 +4,7 @@ import einops
 import torch.nn.functional as F
 
 ONNX_PATH_PPE   = os.path.join("onnx", "dummy.onnx")
-ENGINE_PATH_PPE =  os.path.join("engines", "dummy.plan") 
+ENGINE_PATH_PPE =  os.path.join("engines", "dummy_nms.plan") 
 ONNX_PATH_REGULAR = os.path.join("onnx", "yolox_s.onnx")
 ENGINE_PATH_REGULAR = os.path.join("engines", "yolox_s.plan")
 CONF_TH     = 0.50
@@ -130,6 +130,7 @@ def post_process_img(output, confidence_threshold = 0.25, iou_threshold = 0.5) -
                              final_boxes, 
                              final_scores.unsqueeze(1)), dim=1)
     return predictions
+
 def _box_iou(boxes1: torch.Tensor, boxes2: torch.Tensor) -> torch.Tensor:
     """
     Vectorized IoU for two -sets- of axis-aligned boxes.
@@ -202,7 +203,7 @@ def add_nms_trt(network):
     # This function assumes that sigmoid has already been applied to obj and class_scores, and the network is in the shape (cx,cy,w,h,obj, ...)
     
     strides = trt.Dims([1,1,1])
-    starts = trt.dims([0,0,0])
+    starts = trt.Dims([0,0,0])
     # There should only be one output for the current network
     output = network.get_output(0)
     network.unmark_output(output)
@@ -224,9 +225,14 @@ def add_nms_trt(network):
     scores = network.add_slice(output, starts, shapes, strides)
 
     registry = trt.get_plugin_registry()
-    assert(registry)
+    for c in registry.plugin_creator_list:
+        print(c.name, c.plugin_version, c.plugin_namespace)
+
+    if registry is None:
+        raise Exception("registry is none")
     creator = registry.get_plugin_creator("EfficientNMS_TRT", "1")
-    assert(creator)
+    if creator is None:
+        raise Exception("creator is none")
     fc = []
     fc.append(trt.PluginField("background_class", np.array([-1],dtype=np.int32), trt.PluginFieldtype.INT32))
     fc.append(trt.PluginField("max_output_boxes", np.array([MAX_OUTPUT_BOXES], dtype=np.int32), trt.PluginFieldType.INT32))
@@ -247,7 +253,7 @@ def add_nms_trt(network):
         network.mark_output(layer.get_output(i))
     return network
 
-def build_engine(onnx_path: str, engine_path: str):
+def build_engine(onnx_path: str, engine_path: str, half_precision: bool = True) -> trt.ICudaEngine:
     if os.path.exists(engine_path):
         with open(engine_path, "rb") as f, trt.Runtime(TRT_LOGGER) as rt:
             return rt.deserialize_cuda_engine(f.read())
@@ -271,7 +277,9 @@ def build_engine(onnx_path: str, engine_path: str):
     config = builder.create_builder_config()
     # arbitrary, maybe play with this
     config.set_memory_pool_limit(trt.MemoryPoolType.WORKSPACE, 1 << 28)   # 256 MiB
-    # config.set_flag(trt.BuilderFlag.FP16)
+    if half_precision:
+        config.set_flag(trt.BuilderFlag.FP16)
+    
 
     print("Building TensorRT engine …")
     serialized_engine = builder.build_serialized_network(network, config)
@@ -291,7 +299,7 @@ def build_engine(onnx_path: str, engine_path: str):
 def alloc_outputs(engine, context):
     output_buffers, ptrs = {}, {}
     DT = {
-        trt.DataType.Float: torch.float32,
+        trt.DataType.FLOAT: torch.float32,
         trt.DataType.INT32: torch.int32
     }
     for i in range(engine.num_io_tensors):
@@ -317,8 +325,8 @@ def main():
     # 2.  Allocate CUDA I/O buffers – use torch tensors for convenience           #
     # --------------------------------------------------------------------------- #
     input_shape = (1,3,640,640)
-    output_shape_ppe = (1, 8400, 11)
-    output_shape_reg = (1, 8400, 85)
+    # output_shape_ppe = (1, 8400, 11)
+    # output_shape_reg = (1, 8400, 85)
 
     # allocate with torch (pinned host <-> device copies handled by cuda.to_dlpack)
     inp_torch_ppe  = torch.empty(size=input_shape, dtype=torch.float32, device="cuda")
@@ -328,17 +336,19 @@ def main():
 
 
     d_in_ppe  = inp_torch_ppe.data_ptr()
-    d_out_ppe = preds_ppe.data_ptr()
+    # d_out_ppe = preds_ppe.data_ptr()
     d_in_reg  = inp_torch_reg.data_ptr()
-    d_out_reg = preds_reg.data_ptr()
+    # d_out_reg = preds_reg.data_ptr()
 
 
     context_ppe.set_tensor_address("input", d_in_ppe)
-    context_ppe.set_tensor_address("output", d_out_ppe)
+    # context_ppe.set_tensor_address("output", d_out_ppe)
     context_reg.set_tensor_address("input", d_in_reg)
-    context_reg.set_tensor_address("output", d_out_reg)
+    # context_reg.set_tensor_address("output", d_out_reg)
     stream_ppe = torch.cuda.Stream()
     stream_reg = torch.cuda.Stream()
+    output_buffers_ppe, ptrs_ppe = alloc_outputs(engine_ppe, context_ppe)
+    output_buffers_reg, ptrs_reg = alloc_outputs(engine_reg, context_reg)
 
     # --------------------------------------------------------------------------- #
     # 3.  Video loop                                                              #
@@ -351,6 +361,7 @@ def main():
     cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
     cv2.namedWindow("YOLO-TensorRT", cv2.WINDOW_NORMAL)
     frame_count, t0 = 0, time.time()
+
     while True:
         ok, frame = cap.read()
         if not ok:
@@ -373,26 +384,30 @@ def main():
         
         # ---------------------------------------------------------------------- #
 
-        processed_preds_ppe = post_process_img(
-            preds_ppe[0], confidence_threshold=CONF_TH, iou_threshold=IOU_TH
-        ).cpu().numpy()
+        # processed_preds_ppe = post_process_img(
+        #     preds_ppe[0], confidence_threshold=CONF_TH, iou_threshold=IOU_TH
+        # ).cpu().numpy()
 
-        if processed_preds_ppe.any():
-            processed_preds_ppe[..., 2] = processed_preds_ppe[..., 2] - 80
-            processed_preds_ppe[..., 4] = processed_preds_ppe[..., 4] - 80
+        # if processed_preds_ppe.any():
+        #     processed_preds_ppe[..., 2] = processed_preds_ppe[..., 2] - 80
+        #     processed_preds_ppe[..., 4] = processed_preds_ppe[..., 4] - 80
 
-        processed_preds_reg = post_process_img(
-            preds_reg[0], confidence_threshold=CONF_TH, iou_threshold=IOU_TH
-        ).cpu().numpy()
+        # processed_preds_reg = post_process_img(
+        #     preds_reg[0], confidence_threshold=CONF_TH, iou_threshold=IOU_TH
+        # ).cpu().numpy()
  
-        if processed_preds_reg.any():
-            processed_preds_reg[..., 2] = processed_preds_reg[..., 2] - 80
-            processed_preds_reg[..., 4] = processed_preds_reg[..., 4] - 80
+        # if processed_preds_reg.any():
+        #     processed_preds_reg[..., 2] = processed_preds_reg[..., 2] - 80
+        #     processed_preds_reg[..., 4] = processed_preds_reg[..., 4] - 80
 
+        num_pred_ppe = output_buffers_ppe["num"]
+        boxes_ppe = output_buffers_ppe["boxes"]
+        scores_ppe = output_buffers_ppe["scores"].unsqueeze(-1)
+        classes_ppe = output_buffers_ppe["classes"].unsqueeze(-1)
+
+        processed_preds_ppe = torch.cat([classes_ppe, boxes_ppe, scores_ppe], dim=-1)
         vis = draw_ppe(frame, processed_preds_ppe)       # draw on original BGR frame
-        vis = draw_reg_yolo(frame, processed_preds_reg)
-
-        # vis = vis[pads[0]:vis.shape[0] - pads[1], pads[2]:vis.shape[1] - pads[3]]
+        # vis = draw_reg_yolo(frame, processed_preds_reg)
 
         cv2.imshow("YOLO-TensorRT", vis)
         if cv2.waitKey(1) & 0xFF == ord('q'):           # q quits

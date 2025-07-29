@@ -1,6 +1,6 @@
 import torch
-from torchvision.ops import nms, batched_nms
-import matplotlib.pyplot as plt
+# from torchvision.ops import nms, batched_nms
+#import matplotlib.pyplot as plt
 
 from .ppe_dataset import PPE_DATA
 from yolox.model import create_yolox_s
@@ -92,14 +92,14 @@ def calculate_AP_per_class(gt, preds, gt_to_img, preds_to_img, iou_thresh, devic
         mrec = mrec.cpu().numpy()
         mpre = mpre.cpu().numpy()
         class_names = ["coat", "no-coat", "eyewear", "no-eyewear"]
-        plt.figure(figsize = (5,5))
-        plt.step(mrec, mpre, where="post", label = f"Class {class_id} AP: {ap:.4f}")
-        plt.xlabel("Recall")
-        plt.ylabel("Precision")
-        plt.title(f"Precision-Recall Curve for Class {class_id}")
-        plt.xlim(0,1); plt.ylim(0,1)
-        plt.legend()
-        plt.savefig(f"output_images/class_{class_names[class_id]}_pr_curve.png")
+        #plt.figure(figsize = (5,5))
+        #plt.step(mrec, mpre, where="post", label = f"Class {class_id} AP: {ap:.4f}")
+        #plt.xlabel("Recall")
+        #plt.ylabel("Precision")
+        #plt.title(f"Precision-Recall Curve for Class {class_id}")
+        #plt.xlim(0,1); plt.ylim(0,1)
+        #plt.legend()
+        #plt.savefig(f"output_images/class_{class_names[class_id]}_pr_curve.png")
         print("saved plt")
     return ap, precision[-1].item(), recall[-1].item()  # return AP, precision at 1.0 recall, and recall at 1.0 precision
 
@@ -182,10 +182,7 @@ def post_process_img(output, confidence_threshold = 0.25, iou_threshold = 0.5, u
     best_scores = best_scores[mask] 
     best_class = best_class[mask] 
     boxes = boxes[mask]
-    if use_batched_nms:
-        keep = batched_nms(boxes, best_scores, best_class, iou_threshold=iou_threshold)
-    else:
-        keep = nms(boxes, best_scores, iou_threshold = iou_threshold)
+    keep = nms(boxes, best_scores, iou_threshold = iou_threshold)
     final_boxes = boxes[keep]
     final_classes = best_class[keep]
     final_scores = best_scores[keep]
@@ -194,6 +191,69 @@ def post_process_img(output, confidence_threshold = 0.25, iou_threshold = 0.5, u
                              final_boxes, 
                              final_scores.unsqueeze(1)), dim=1)
     return predictions
+
+
+def _box_iou(boxes1: torch.Tensor, boxes2: torch.Tensor) -> torch.Tensor:
+    """
+    Vectorized IoU for two -sets- of axis-aligned boxes.
+    boxes{1,2}: (N, 4) or (M, 4) in XYXY format (x1, y1, x2, y2)
+    Returns:    (N, M) IoU matrix
+    """
+    # areas
+    area1 = (boxes1[:, 2] - boxes1[:, 0]).clamp(0) * (
+        boxes1[:, 3] - boxes1[:, 1]
+    ).clamp(0)
+    area2 = (boxes2[:, 2] - boxes2[:, 0]).clamp(0) * (
+        boxes2[:, 3] - boxes2[:, 1]
+    ).clamp(0)
+
+    # pairwise intersections
+    lt = torch.maximum(boxes1[:, None, :2], boxes2[:, :2])  # (N, M, 2)
+    rb = torch.minimum(boxes1[:, None, 2:], boxes2[:, 2:])  # (N, M, 2)
+    wh = (rb - lt).clamp(min=0)                             # width‑height
+    inter = wh[..., 0] * wh[..., 1]                         # (N, M)
+
+    # IoU = inter / (area1 + area2 - inter)
+    return inter / (area1[:, None] + area2 - inter + 1e-7)
+
+
+def nms(boxes: torch.Tensor, scores: torch.Tensor, iou_threshold: float) -> torch.Tensor:
+    """
+    Pure-PyTorch Non-Maximum Suppression mirroring
+    torchvision.ops.nms(...).
+
+    Args
+    ----
+    boxes         (Tensor[N,4])  - boxes in (x1, y1, x2, y2) format
+    scores        (Tensor[N])     - confidence scores
+    iou_threshold (float)         - IoU overlap threshold to suppress
+
+    Returns
+    -------
+    keep (Tensor[K]) - indices of boxes that survive NMS,
+                       sorted in descending score order
+    """
+    if boxes.numel() == 0:
+        return torch.empty((0,), dtype=torch.int64, device=boxes.device)
+
+    # sort by score descending
+    order = scores.argsort(descending=True)
+    keep = []
+
+    while order.numel() > 0:
+        i = order[0]              # index of current highest score
+        keep.append(i.item())
+
+        if order.numel() == 1:    # nothing left to compare
+            break
+
+        # IoU of the current box with the rest
+        ious = _box_iou(boxes[i].unsqueeze(0), boxes[order[1:]]).squeeze(0)
+
+        # keep boxes with IoU ≤ threshold
+        order = order[1:][ious <= iou_threshold]
+
+    return torch.as_tensor(keep, dtype=torch.long, device=boxes.device)
 
 if __name__ == "__main__":
     device = "cuda"
