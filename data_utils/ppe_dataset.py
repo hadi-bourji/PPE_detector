@@ -11,7 +11,7 @@ import random
 from torchvision import tv_tensors
 class PPE_DATA(Dataset):
     def __init__(self, data_path: str = "./data", mode="train", 
-                 max_ground_truth_boxes=30, p_mosaic = 1/32, apply_transforms=False, 
+                 max_gt=50, p_mosaic = 1/32, apply_transforms=False, 
                  include_eyewear = True):
         # read file names from train.txt or validation.txt file
         # data_path is either a path to your train/val directory or a direct path to a file 
@@ -27,7 +27,7 @@ class PPE_DATA(Dataset):
             else:
                 raise Exception("Invalid Mode Entered")
         
-        self.max_gt = max_ground_truth_boxes
+        self.max_gt = max_gt
         self.p_mosaic = p_mosaic
         self.mosaic = Mosaic(include_eyewear = include_eyewear)
 

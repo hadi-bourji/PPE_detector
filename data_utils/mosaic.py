@@ -56,7 +56,7 @@ class Mosaic(nn.Module):
 
         new_img = cv2.imread(img_path)
         lbl_path = img_path.replace('/images/', '/labels/').rsplit('.', 1)[0] + '.txt'
-        if os.stat(lbl_path).st_size == 0:
+        if not os.path.exists(lbl_path) or os.stat(lbl_path).st_size == 0:
             label = np.empty((0, 5), dtype=np.float32)  # empty tensor for no labels
         else:
             label = np.loadtxt(lbl_path, dtype=np.float32)

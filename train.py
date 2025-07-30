@@ -50,12 +50,11 @@ def make_table(metrics_history, num_rows_to_show=25):
 
 def train(num_classes = 4, num_epochs = 50, validate = True, batch_size = 16, max_gt=30, 
           logging = True, device="cuda", lr = 0.001, weight_decay = 0.0005, save_epochs = [50, 100, 200, 250],
-          use_amp = True, model_name = "yolox_m", data_name = ""):
+          use_amp = True, model_name = "yolox_m", data_name = "", apply_transforms = True):
 
     today = datetime.today()
     date_str = today.strftime("%m-%d_%H")
-    # exp_name = f"{model_name}_ua{use_amp}_nc{num_classes}_ep{num_epochs}_bs{batch_size}_lr{lr:.0e}_wd{weight_decay:.0e}_{date_str}"
-    exp_name = f"{model_name}_nopretrained_{date_str}"
+    exp_name = f"{model_name}_ua{use_amp}_transforms{apply_transforms}_dn({data_name}_nc{num_classes}_ep{num_epochs}_bs{batch_size}_lr{lr:.0e}_wd{weight_decay:.0e}_{date_str}"
     print(f"Experiment Name: {exp_name}")
     print("using amp: ", use_amp)
 
@@ -85,13 +84,13 @@ def train(num_classes = 4, num_epochs = 50, validate = True, batch_size = 16, ma
         model = create_yolox_s(num_classes)
     else:
         raise Exception("model name must be yolox_m or yolox_s")
-    #model = load_pretrained_weights(model, weight_path, num_classes= num_classes)
+    model = load_pretrained_weights(model, weight_path, num_classes= num_classes)
     model.train().to(device)
     for k, v in model.named_parameters():
          if k.startswith("backbone"):
             v.requires_grad = False
 
-    dataset = PPE_DATA(data_path=f"./data/{data_name}", mode="train",p_mosaic = 1 / batch_size, apply_transforms = False)
+    dataset = PPE_DATA(data_path=f"./data/{data_name}", mode="train",max_gt = max_gt, p_mosaic = 1 / batch_size, apply_transforms = apply_transforms)
     dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True, num_workers=8, pin_memory=True)
     if validate:
         val_dataset = PPE_DATA(data_path="./data", mode="val")
@@ -304,7 +303,7 @@ if __name__ == "__main__":
         num_epochs=300,
         validate=True,
         batch_size=8,
-        max_gt=30,
+        max_gt=50,
         logging=True,
         device=device,
         lr=0.0001,
@@ -318,7 +317,7 @@ if __name__ == "__main__":
         num_epochs=300,
         validate=True,
         batch_size=8,
-        max_gt=30,
+        max_gt=50,
         logging=True,
         device=device,
         lr=0.0001,
@@ -327,4 +326,80 @@ if __name__ == "__main__":
         use_amp=True,
         model_name="yolox_m",
     )
+    train(
+        num_classes=6,
+        num_epochs=200,
+        validate=True,
+        batch_size=8,
+        max_gt=50,
+        logging=True,
+        device=device,
+        lr=0.0001,
+        weight_decay=0.0005,
+        save_epochs=[50, 100],
+        use_amp=True,
+        model_name="yolox_s",
+        data_name="s.txt"
+    )
+    train(
+        num_classes=6,
+        num_epochs=200,
+        validate=True,
+        batch_size=8,
+        max_gt=50,
+        logging=True,
+        device=device,
+        lr=0.0001,
+        weight_decay=0.0005,
+        save_epochs=[50, 100],
+        use_amp=True,
+        model_name="yolox_s",
+        data_name="B10train.txt"
+    )
+    train(
+        num_classes=6,
+        num_epochs=200,
+        validate=True,
+        batch_size=8,
+        max_gt=50,
+        logging=True,
+        device=device,
+        lr=0.0001,
+        weight_decay=0.0005,
+        save_epochs=[50, 100],
+        use_amp=True,
+        model_name="yolox_s",
+        data_name="data_389.txt"
+    )
+    train(
+        num_classes=6,
+        num_epochs=200,
+        validate=True,
+        batch_size=8,
+        max_gt=50,
+        logging=True,
+        device=device,
+        lr=0.0001,
+        weight_decay=0.0005,
+        save_epochs=[50, 100],
+        use_amp=True,
+        model_name="yolox_s",
+        data_name="data_393.txt"
+    )
+    train(
+        num_classes=6,
+        num_epochs=200,
+        validate=True,
+        batch_size=8,
+        max_gt=50,
+        logging=True,
+        device=device,
+        lr=0.0001,
+        weight_decay=0.0005,
+        save_epochs=[50, 100],
+        use_amp=True,
+        model_name="yolox_s",
+        data_name="data_.txt"
+    )    
+
 
