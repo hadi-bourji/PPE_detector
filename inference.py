@@ -105,11 +105,19 @@ def draw_reg_yolo(n, outputs):
 start = time.time()
 print("Starting video capture...")
 cap = cv2.VideoCapture(0, cv2.CAP_DSHOW)
+# cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
+# cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
+mid_val = 128/255.0
+# cap.set(cv2.CAP_PROP_BRIGHTNESS, mid_val)
+# cap.set(cv2.CAP_PROP_CONTRAST, mid_val)
+# cap.set(cv2.CAP_PROP_SATURATION, mid_val)
+# cap.set(cv2.CAP_PROP_EXPOSURE, -4)  # Adjust exposure for better lighting
 cv2.namedWindow('main', cv2.WINDOW_NORMAL)
 
-# weight_path = "model_checkpoints/yolox_m_uaTrue_nc4_ep15_bs8_lr1e-04_wd5e-04_07-08_14.pth"
+weight_path = "model_checkpoints\\best_ppe.pth"
+# weight_path = "model_checkpoints\\yolox_s_uaTrue_nc6_ep300_bs8_lr1e-04_wd5e-04_07-17_11_ce200.pth"
 # BEST MODEL
-weight_path = "model_checkpoints\\yolox_m_nc4_ep300_bs8_lr1e-04_wd5e-04_07-08_10_ce100.pth"
+# weight_path = "model_checkpoints_old\\yolox_m_nc4_ep300_bs8_lr1e-04_wd5e-04_07-08_10_ce100.pth"
 
 # weight_path = "model_checkpoints\\yolox_s_nc4_ep300_bs16_lr1e-04_wd5e-04_07-08_00.pth"
 
@@ -132,7 +140,7 @@ device = 'cuda' if torch.cuda.is_available() else 'cpu'
 print(f"Using device: {device}")
 frame_count = 0
 start = time.time()
-num_classes = 4
+num_classes = 6
 ppe_yolo = create_yolo(num_classes = num_classes, device = device, weight_path = weight_path, 
                        use_pretrained_yolo = False, yolo_type='m')
 reg_yolo = create_yolo(num_classes = 80, device = device, weight_path = "yolox\\yolox_m.pth", 
