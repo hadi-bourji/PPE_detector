@@ -109,7 +109,7 @@ cv2.namedWindow('main', cv2.WINDOW_NORMAL)
 
 # weight_path = "model_checkpoints/yolox_m_uaTrue_nc4_ep15_bs8_lr1e-04_wd5e-04_07-08_14.pth"
 # BEST MODEL
-weight_path = "model_checkpoints\\yolox_m_nc4_ep300_bs8_lr1e-04_wd5e-04_07-08_10_ce100.pth"
+weight_path = "model_checkpoints/yolox_m_uaTrue_transformsTrue_dn()_nc6_ep300_bs8_lr1e-04_wd5e-04_07-30_02.pth"
 
 # weight_path = "model_checkpoints\\yolox_s_nc4_ep300_bs16_lr1e-04_wd5e-04_07-08_00.pth"
 
@@ -132,7 +132,7 @@ device = 'cuda' if torch.cuda.is_available() else 'cpu'
 print(f"Using device: {device}")
 frame_count = 0
 start = time.time()
-num_classes = 4
+num_classes = 6
 ppe_yolo = create_yolo(num_classes = num_classes, device = device, weight_path = weight_path, 
                        use_pretrained_yolo = False, yolo_type='m')
 reg_yolo = create_yolo(num_classes = 80, device = device, weight_path = "yolox\\yolox_m.pth", 
