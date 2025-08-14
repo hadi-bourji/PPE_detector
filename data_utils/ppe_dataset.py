@@ -42,7 +42,7 @@ class PPE_DATA(Dataset):
             img = self.resize_img(img, output_size=640)
             img, labels = self.mosaic.forward(img, labels, self.file_names, output_size=640)
         else:
-            img, labels = self.resize_and_pad_img(img, labels, output_size=640)
+            img, labels = self.resize_and_pad_img_and_labels(img, labels, output_size=640)
         
         # at this point it should be 640, if not something messed up with mosaic most likely
         img_size = 640
@@ -64,7 +64,8 @@ class PPE_DATA(Dataset):
         return img, labels
 
     # Used for validaation, just resize and pad
-    def resize_and_pad_img(self, img, labels,  output_size = 640):
+    @staticmethod
+    def resize_and_pad_img_and_labels(img, labels,  output_size = 640):
 
         height, width = img.shape[1:]
         scale = min(output_size / width, output_size / height)
@@ -84,23 +85,19 @@ class PPE_DATA(Dataset):
         img = F.pad(img, (pad_left, pad_right, pad_top, pad_bottom), value = 114.0)
 
         # scale labels up to pixel coords, scale by the same refactoring, add padding, then normalize
-        if scale < 1:
-            if labels.any():
-                labels[..., 1] = (labels[..., 1] * width * scale + pad_left) / output_size   # xc
-                labels[..., 2] = (labels[..., 2] * height * scale + pad_top ) / output_size   # yc
-                labels[..., 3] = (labels[..., 3] * width * scale) / output_size              # w
-                labels[..., 4] = (labels[..., 4] * height * scale) / output_size              # h
-        else:
-            if labels.any():
-                labels[..., 1] = (labels[..., 1] * width + pad_left) / output_size   # xc
-                labels[..., 2] = (labels[..., 2] * height + pad_top) / output_size   # yc
-                labels[..., 3] = (labels[..., 3] * width) / output_size              # w
-                labels[..., 4] = (labels[..., 4] * height) / output_size              # h
+        if scale > 1:
+            scale = 1
+        if labels and labels.any():
+            labels[..., 1] = (labels[..., 1] * width * scale + pad_left) / output_size   # xc
+            labels[..., 2] = (labels[..., 2] * height * scale + pad_top ) / output_size   # yc
+            labels[..., 3] = (labels[..., 3] * width * scale) / output_size              # w
+            labels[..., 4] = (labels[..., 4] * height * scale) / output_size              # h
 
         return img.squeeze(0), labels
     
     # Used for training as input into transforms
-    def resize_img(self, img, output_size = 640):
+    @staticmethod
+    def resize_img(img, output_size = 640):
         # resize image to output_size, keeping aspect ratio
         height, width = img.shape[1:]
         scale = min(output_size / width, output_size / height)
@@ -138,7 +135,7 @@ class PPE_DATA(Dataset):
         if self.transforms:
             img, labels = self.apply_transforms(img, labels)
         else:
-            img, labels = self.resize_and_pad_img(img, labels, output_size=640)
+            img, labels = self.resize_and_pad_img_and_labels(img, labels, output_size=640)
 
         if labels.shape[0] > self.max_gt:
             raise Exception(f"Too many ground truth boxes in {img_path}: {labels.shape[0]} > {self.max_gt}")
@@ -172,8 +169,8 @@ class PPE_DATA(Dataset):
             n = n.astype(np.uint8)
 
         # use this to draw different colors for each label
-        edge_colors = [(0,0,255), (0,255,0), (255,0,0), (0,255,255)]
-        class_names = ["coat", "no-coat", "eyewear", "no-eyewear"]
+        edge_colors = [(255,255,255), (0,0, 255), (255,0,255), (0,255,255), (255, 255, 0), (190, 190, 255)]
+        class_names = ["coat", "no-coat", "eyewear", "no-eyewear", "gloves", "no-gloves"]
         #TODO does this always work?
         if labels.ndim == 3:
             labels = labels.squeeze(0)
@@ -221,7 +218,7 @@ class PPE_DATA(Dataset):
         cv2.imwrite(output_path, n)
 
 if __name__ == "__main__":
-    dataset = PPE_DATA(include_eyewear=False)
-    index = int(random.random() * len(dataset))
-    print(index)
-    img, labels = dataset.__getitem__(index)
+    dataset = PPE_DATA()
+    data = "data/images/train/eurofins17_0148.jpg"
+    img, labels = dataset.read_img_and_labels(data)
+    PPE_DATA.show_img(img, labels)

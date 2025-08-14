@@ -42,7 +42,7 @@ def process_frame(frame, device = 'cuda', output_size = 640):
 
 
 def draw_ppe(n, outputs):
-    edge_colors = [(0,255,0),(0,0,255), (255,255,0), (0,255,255), (255, 0, 255), (180, 180, 255)]
+    edge_colors = [(255,255,255),(0,0,255), (255,0, 255), (0,255,255), (255, 255, 0), (190, 190, 255)]
     class_names = ["coat", "no-coat", "eyewear", "no-eyewear", "gloves", "no-gloves"]
     for label in outputs:
         c, x1, y1, x2, y2, s = label
@@ -105,16 +105,18 @@ def draw_reg_yolo(n, outputs):
 start = time.time()
 print("Starting video capture...")
 cap = cv2.VideoCapture(0, cv2.CAP_DSHOW)
-# cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
-# cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
+cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
+cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 360)
 mid_val = 128/255.0
 # cap.set(cv2.CAP_PROP_BRIGHTNESS, mid_val)
 # cap.set(cv2.CAP_PROP_CONTRAST, mid_val)
 # cap.set(cv2.CAP_PROP_SATURATION, mid_val)
 # cap.set(cv2.CAP_PROP_EXPOSURE, -4)  # Adjust exposure for better lighting
 cv2.namedWindow('main', cv2.WINDOW_NORMAL)
+cv2.setWindowProperty("main", cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
 
-weight_path = "model_checkpoints\\best_ppe.pth"
+
+weight_path = "model_checkpoints\\yolox_m_uaTrue_transformsTrue_dn()_nc6_ep300_bs8_lr1e-04_wd5e-04_07-30_02.pth"
 # weight_path = "model_checkpoints\\yolox_s_uaTrue_nc6_ep300_bs8_lr1e-04_wd5e-04_07-17_11_ce200.pth"
 # BEST MODEL
 # weight_path = "model_checkpoints_old\\yolox_m_nc4_ep300_bs8_lr1e-04_wd5e-04_07-08_10_ce100.pth"
@@ -143,8 +145,8 @@ start = time.time()
 num_classes = 6
 ppe_yolo = create_yolo(num_classes = num_classes, device = device, weight_path = weight_path, 
                        use_pretrained_yolo = False, yolo_type='m')
-reg_yolo = create_yolo(num_classes = 80, device = device, weight_path = "yolox\\yolox_m.pth", 
-                       use_pretrained_yolo = True, yolo_type='m')
+# reg_yolo = create_yolo(num_classes = 80, device = device, weight_path = "yolox\\yolox_m.pth", 
+#                        use_pretrained_yolo = True, yolo_type='m')
 
 while True:
     ret, frame = cap.read()
@@ -157,16 +159,16 @@ while True:
     with torch.no_grad():
         outputs1 = ppe_yolo(img)
         outputs1 = post_process_img(outputs1[0], confidence_threshold=0.5, iou_threshold=0.5, use_batched_nms=False)
-        outputs2 = reg_yolo(img)
-        outputs2 = post_process_img(outputs2[0], confidence_threshold=0.5, iou_threshold=0.5, use_batched_nms=False)
+        # outputs2 = reg_yolo(img)
+        # outputs2 = post_process_img(outputs2[0], confidence_threshold=0.5, iou_threshold=0.5, use_batched_nms=False)
 
     img = img.squeeze(0)
     n = einops.rearrange(img, "c h w -> h w c").cpu().numpy().copy().astype(np.uint8)
     outputs1 = outputs1.cpu().numpy()
-    outputs2 = outputs2.cpu().numpy()
+    # outputs2 = outputs2.cpu().numpy()
 
     n = draw_ppe(n, outputs1)
-    n = draw_reg_yolo(n, outputs2)
+    # n = draw_reg_yolo(n, outputs2)
 
     if frame_count % 30 == 0:
         elapsed_time = time.time() - start
