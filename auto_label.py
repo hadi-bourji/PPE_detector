@@ -4,6 +4,7 @@ import os, cv2, torch, numpy as np, shutil
 from yolox.test_weights import load_pretrained_weights
 from yolox.model import create_yolox_m
 from tqdm import tqdm
+import argparse
 
 def label_imgs(img_dir, output_dir, model, device='cuda'):
     os.makedirs(os.path.join(output_dir, "images", "train"), exist_ok=True)
@@ -90,7 +91,6 @@ def label_imgs(img_dir, output_dir, model, device='cuda'):
                     f.write("\n".join(lines))
 
 if __name__ == "__main__":
-    import argparse
 
     parser = argparse.ArgumentParser(description="Automatically label images using a YOLO model.")
     parser.add_argument("img_dir", type=str, help="Directory containing images to label.")
