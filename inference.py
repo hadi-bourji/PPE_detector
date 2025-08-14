@@ -102,40 +102,21 @@ def draw_reg_yolo(n, outputs):
             cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0,0,0), 1, cv2.LINE_AA)
     return n
 
-start = time.time()
 print("Starting video capture...")
 cap = cv2.VideoCapture(0, cv2.CAP_DSHOW)
 cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
 cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 360)
-mid_val = 128/255.0
-# cap.set(cv2.CAP_PROP_BRIGHTNESS, mid_val)
-# cap.set(cv2.CAP_PROP_CONTRAST, mid_val)
-# cap.set(cv2.CAP_PROP_SATURATION, mid_val)
-# cap.set(cv2.CAP_PROP_EXPOSURE, -4)  # Adjust exposure for better lighting
 cv2.namedWindow('main', cv2.WINDOW_NORMAL)
 cv2.setWindowProperty("main", cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
 
 
 weight_path = "model_checkpoints\\yolox_m_uaTrue_transformsTrue_dn()_nc6_ep300_bs8_lr1e-04_wd5e-04_07-30_02.pth"
-# weight_path = "model_checkpoints\\yolox_s_uaTrue_nc6_ep300_bs8_lr1e-04_wd5e-04_07-17_11_ce200.pth"
-# BEST MODEL
-# weight_path = "model_checkpoints_old\\yolox_m_nc4_ep300_bs8_lr1e-04_wd5e-04_07-08_10_ce100.pth"
 
-# weight_path = "model_checkpoints\\yolox_s_nc4_ep300_bs16_lr1e-04_wd5e-04_07-08_00.pth"
-
-# no eyewear 200ep
-# weight_path = "model_checkpoints\\yolox_s_nc2_ep200_bs32_lr1e-03_wd5e-04_07-03_12.pth"
-
-# regular, good yolo 200ep
-# weight_path = 'model_checkpoints\\yolox_s_ep200_bs32_lr1e-03_wd5e-04_07-02_11.pth'
-# weight_path = download_weights('yolox_s.pth')
-# weight_path = "model_checkpoints\\yolox_m_uaTrue_nc6_ep200_bs8_lr1e-04_wd5e-04_07-15_19_ce150.pth"
-
+start = time.perf_counter()
 if not cap.isOpened():
     print("Error: Could not open video.")
     exit()
 
-print(f"Video opened successfully after {time.time() - start:.2f} seconds.")
 
 # coat, no-coat, eyewear, no-eyewear
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
@@ -145,6 +126,8 @@ start = time.time()
 num_classes = 6
 ppe_yolo = create_yolo(num_classes = num_classes, device = device, weight_path = weight_path, 
                        use_pretrained_yolo = False, yolo_type='m')
+# Uncomment if you want to use a second YOLO model
+# To get the yolox weights, you can use the download_weights function imported above
 # reg_yolo = create_yolo(num_classes = 80, device = device, weight_path = "yolox\\yolox_m.pth", 
 #                        use_pretrained_yolo = True, yolo_type='m')
 
@@ -171,7 +154,7 @@ while True:
     # n = draw_reg_yolo(n, outputs2)
 
     if frame_count % 30 == 0:
-        elapsed_time = time.time() - start
+        elapsed_time = time.perf_counter() - start
         fps = frame_count / elapsed_time
         print(f"Avg. FPS: {fps:.2f}")
     
