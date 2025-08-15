@@ -1,6 +1,6 @@
 import torch
 from torch.utils.data import DataLoader
-from yolox.test_weights import load_pretrained_weights
+from yolox.handle_weights import load_pretrained_weights
 from yolox.model import create_yolox_s, create_yolox_l, create_yolox_m
 from data_utils.ppe_dataset import PPE_DATA
 from yolox.loss import YOLOXLoss
@@ -34,12 +34,14 @@ def train(num_classes = 4, num_epochs = 50, validate = True, batch_size = 16, ma
     else:
         raise Exception("model name must be yolox_m or yolox_s")
     model = load_pretrained_weights(model, weight_path, num_classes= num_classes)
+
     model.train().to(device)
+
     for k, v in model.named_parameters():
          if k.startswith("backbone"):
             v.requires_grad = False
 
-    dataset = PPE_DATA(data_path=f"./data/{data_name}", mode="train",max_gt = max_gt, p_mosaic = 1 / batch_size, apply_transforms = apply_transforms)
+    dataset = PPE_DATA(data_path=f"./data/{data_name}", mode="train", max_gt = max_gt, p_mosaic = 1 / batch_size, apply_transforms = apply_transforms)
     dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True, num_workers=8, pin_memory=True)
     if validate:
         val_dataset = PPE_DATA(data_path="./data", mode="val")
@@ -53,9 +55,6 @@ def train(num_classes = 4, num_epochs = 50, validate = True, batch_size = 16, ma
         writer = SummaryWriter(log_dir=f"./logs/{exp_name}")
         writer.add_text("Hyperparameters", f"num_classes: {num_classes}, num_epochs: {num_epochs}, "
                                             f"batch_size: {batch_size}, max_gt: {max_gt}")
-
-    # wrap training loop in live environment to have rich printing
-    t0 = perf_counter()
 
     for epoch in tqdm(range(num_epochs), desc="Training Epochs", unit="epoch"):
         
@@ -82,7 +81,7 @@ def train(num_classes = 4, num_epochs = 50, validate = True, batch_size = 16, ma
             # labels is shape (batch_size, max_gt, 5) where 5 is [c, cx, cy, w, h], all normalized
 
             # Forward pass
-            # output shape: (batch, 8400, 9). Boxes are already decoded to pixel space
+            # output shape: (batch, 8400, 5 + num_classes). Boxes are already decoded to pixel space
             # but left in cx cy format
             with torch.autocast(device_type=device, dtype = torch.float16, enabled=use_amp):
                 outputs = model(img)
@@ -141,7 +140,6 @@ def train(num_classes = 4, num_epochs = 50, validate = True, batch_size = 16, ma
                 writer = writer if logging else None,
                 epoch = epoch if logging else 0,
             )
-        batch_task_id = None
             
         # Compute metrics
         train_loss = running_train_loss / len(dataloader)

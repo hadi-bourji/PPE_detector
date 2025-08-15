@@ -1,7 +1,7 @@
 from data_utils.ppe_dataset import PPE_DATA  # unused now but kept per your stub
 from data_utils.metrics import post_process_img
 import os, cv2, torch, numpy as np, shutil
-from yolox.test_weights import load_pretrained_weights
+from yolox.handle_weights import load_pretrained_weights
 from yolox.model import create_yolox_m
 from tqdm import tqdm
 import argparse

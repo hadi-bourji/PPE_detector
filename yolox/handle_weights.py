@@ -11,8 +11,22 @@ from .model import create_yolox_s, create_yolox_l
 
 
 def download_weights(save_path="./", model = "yolox_s"):
-    """Download YOLOX-s weights if not exists"""
-    
+    """
+    Download a YOLOX checkpoint if it does not already exist locally.
+
+    If ``save_path`` is a directory, the file will be saved as
+    ``<save_path>/<model>.pth``. If a file already exists at the target path,
+    it is returned without downloading.
+
+    :param save_path: Directory to save the weights into (a ``.pth`` filename will be appended).
+    :type save_path: str
+    :param model: Which model to download: ``"yolox_s"``, ``"yolox_m"``, or ``"yolox_l"``.
+    :type model: str
+    :return: Absolute path to the downloaded (or existing) weights file.
+    :rtype: str
+    :raises requests.exceptions.RequestException: If the HTTP request fails.
+    :raises OSError: If the file cannot be written.
+    """
     save_path =os.path.join(save_path, f"{model}.pth") 
     if os.path.exists(save_path):
         return save_path
@@ -37,7 +51,19 @@ def download_weights(save_path="./", model = "yolox_s"):
     return save_path
 
 def map_pretrained_weights(state_dict):
-    """Map original YOLOX weight names to standalone implementation names"""
+    """
+    Remap parameter names from official YOLOX checkpoints to this repository's layout.
+
+    Mapping rules:
+      * ``backbone.backbone.*`` → ``backbone.*``
+      * Top-level ``backbone.*`` (that are not ``backbone.backbone.*``) → ``neck.*``
+      * ``head.*`` keys are left unchanged
+
+    :param state_dict: State dictionary loaded from a YOLOX checkpoint (e.g., via ``torch.load``).
+    :type state_dict: dict[str, torch.Tensor]
+    :return: A new state dictionary with keys remapped according to the above rules.
+    :rtype: dict[str, torch.Tensor]
+    """
     mapped_dict = {}
     
     for key, value in state_dict.items():
@@ -62,12 +88,28 @@ def map_pretrained_weights(state_dict):
 
 def load_pretrained_weights(model, weights_path, num_classes=None, remap = True):
     """
-    Load pretrained weights into model, handling different number of classes
-    
-    Args:
-        model: YOLOX model instance
-        weights_path: Path to weights file
-        num_classes: Number of classes in your model (if different from pretrained)
+    Load a YOLOX checkpoint into ``model``, optionally remapping keys and adapting class heads.
+    NOTE: if you get more than 6 missing/unexpected keys, flip the remap parameter. This is
+    required because the official YOLOX parameters follow different names than this repo.
+
+    The checkpoint can be either a raw ``state_dict`` or a dictionary containing the key
+    ``"model"``. If ``num_classes`` is provided and differs from 80 (COCO), class prediction
+    layers named ``*cls_preds*`` are dropped so the remainder can be loaded non-strictly.
+
+    :param model: Target YOLOX model instance to receive the weights.
+    :type model: torch.nn.Module
+    :param weights_path: Path to a ``.pth`` checkpoint file.
+    :type weights_path: str
+    :param num_classes: Number of classes in the target model. If set and not equal to 80
+                        (when ``remap`` is ``True``), class-specific prediction layers are skipped.
+    :type num_classes: int or None
+    :param remap: Whether to apply :func:`map_pretrained_weights` before loading.
+    :type remap: bool
+    :return: The same ``model`` instance with weights loaded (``strict=False``).
+    :rtype: torch.nn.Module
+    :raises FileNotFoundError: If ``weights_path`` does not exist.
+    :raises RuntimeError: If the loaded state cannot be applied due to incompatible shapes
+                          (beyond the intentionally skipped heads).
     """
     print(f"Loading weights from {weights_path}")
     
@@ -78,9 +120,6 @@ def load_pretrained_weights(model, weights_path, num_classes=None, remap = True)
     # Get model's state dict
     if remap:
             state_dict = map_pretrained_weights(state_dict)
-    # with open("state_dict_mapped.txt", "w") as f:
-    #     for k, v in state_dict.items():
-    #         f.write(f"{k}: {v.shape}\n")
     
     # Filter out classification layers if num_classes is different
     if num_classes is not None and num_classes != 80 and remap:  # 80 is COCO classes
@@ -108,7 +147,7 @@ def load_pretrained_weights(model, weights_path, num_classes=None, remap = True)
 if __name__ == "__main__":
 
     # for testing
-    weights_path = download_weights(save_path = "yolox_l.pth", model="yolox_l")
+    weights_path = download_weights(save_path = "yolox_l", model="yolox_l")
     num_classes = 4
     model = create_yolox_l(num_classes)
     model_dict = model.state_dict

@@ -1,6 +1,6 @@
 import torch
 from yolox.model import create_yolox_s, create_yolox_m
-from yolox.test_weights import load_pretrained_weights
+from yolox.handle_weights import load_pretrained_weights
 
 # # model_int8.eval()
 def onnx_export(model, output_path):

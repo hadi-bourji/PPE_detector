@@ -194,65 +194,6 @@ def nms(boxes: torch.Tensor, scores: torch.Tensor, iou_threshold: float) -> torc
     return torch.as_tensor(keep, dtype=torch.long, device=boxes.device)
 
 
-# --------------------------------------------------------------------------- #
-# 1.  Build or load TensorRT engine                                           #
-# --------------------------------------------------------------------------- #
-def add_nms_trt(network):
-
-    #IMPORTANT
-    # This function assumes that sigmoid has already been applied to obj and class_scores, and the network is in the shape (cx,cy,w,h,obj, ...)
-    
-    strides = trt.Dims([1,1,1])
-    starts = trt.Dims([0,0,0])
-    # There should only be one output for the current network
-    output = network.get_output(0)
-    network.unmark_output(output)
-    bs, num_boxes, temp = output.shape
-
-    # get the boxes from network output
-    shapes = trt.Dims([bs, num_boxes, 4])
-    boxes = network.add_slice(output, starts, shapes, strides)
-
-    # get the obj from network output
-    num_classes = temp - 5
-    starts[2] = 4
-    shapes[2] = 1
-    obj_score = network.add_slice(output, starts, shapes, strides)
-
-    # get the class scores
-    starts[2] = 5
-    shapes[2] = num_classes
-    scores = network.add_slice(output, starts, shapes, strides)
-
-    registry = trt.get_plugin_registry()
-    for c in registry.plugin_creator_list:
-        print(c.name, c.plugin_version, c.plugin_namespace)
-
-    if registry is None:
-        raise Exception("registry is none")
-    creator = registry.get_plugin_creator("EfficientNMS_TRT", "1")
-    if creator is None:
-        raise Exception("creator is none")
-    fc = []
-    fc.append(trt.PluginField("background_class", np.array([-1],dtype=np.int32), trt.PluginFieldtype.INT32))
-    fc.append(trt.PluginField("max_output_boxes", np.array([MAX_OUTPUT_BOXES], dtype=np.int32), trt.PluginFieldType.INT32))
-    fc.append(trt.PluginField("score_threshold", np.array([CONF_TH], dtype=np.float32), trt.PluginFieldType.FLOAT32))
-    fc.append(trt.PluginField("iou_threshold", np.array([IOU_TH], dtype=np.float32), trt.PluginFieldType.FLOAT32))
-    fc.append(trt.PluginField("box_coding", np.array([1], dtype=np.int32), trt.PluginFieldType.INT32))
-    fc.append(trt.PluginField("score_activation", np.array([0], dtype=np.int32), trt.PluginFieldType.INT32))
-    fc.append(trt.PluginField("class_agnostic", np.array([0], dtype=np.int32), trt.PluginFieldType.INT32))
-
-    fc = trt.PluginFieldCollection(fc)
-    nms_layer = creator.create_plugin("nms_layer", fc)
-    layer = network.add_plugin_v2([boxes.get_output(0), scores.get_output(0)], nms_layer)
-    layer.get_output(0).name = "num"
-    layer.get_output(1).name = "boxes"
-    layer.get_output(2).name = "scores"
-    layer.get_output(3).name = "classes"
-    for i in range(4):
-        network.mark_output(layer.get_output(i))
-    return network
-
 def build_engine(onnx_path: str, engine_path: str, half_precision: bool = True) -> trt.ICudaEngine:
     if os.path.exists(engine_path):
         with open(engine_path, "rb") as f, trt.Runtime(TRT_LOGGER) as rt:

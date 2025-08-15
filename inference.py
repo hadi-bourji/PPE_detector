@@ -1,6 +1,6 @@
 import cv2
 import torch
-from yolox.test_weights import load_pretrained_weights, download_weights 
+from yolox.handle_weights import load_pretrained_weights, download_weights 
 from yolox.model import create_yolox_s, create_yolox_l, create_yolox_m
 import einops
 from data_utils.metrics import post_process_img
@@ -141,9 +141,9 @@ while True:
 
     with torch.no_grad():
         outputs1 = ppe_yolo(img)
-        outputs1 = post_process_img(outputs1[0], confidence_threshold=0.5, iou_threshold=0.5, use_batched_nms=False)
+        outputs1 = post_process_img(outputs1[0], confidence_threshold=0.5, iou_threshold=0.5)
         # outputs2 = reg_yolo(img)
-        # outputs2 = post_process_img(outputs2[0], confidence_threshold=0.5, iou_threshold=0.5, use_batched_nms=False)
+        # outputs2 = post_process_img(outputs2[0], confidence_threshold=0.5, iou_threshold=0.5)
 
     img = img.squeeze(0)
     n = einops.rearrange(img, "c h w -> h w c").cpu().numpy().copy().astype(np.uint8)

@@ -1,14 +1,21 @@
 import torch
-# from torchvision.ops import nms, batched_nms
-#import matplotlib.pyplot as plt
-
 from .ppe_dataset import PPE_DATA
 from yolox.model import create_yolox_s
-from yolox.test_weights import load_pretrained_weights
+from yolox.handle_weights import load_pretrained_weights
 
 # pred: (6,) gt: (num_gt, 5). For both, 1:5 are box coordinates
 def pairwise_iou(pred, gt):
+    '''Calculate the Intersection over Union (IoU) between a predicted box and ground truth boxes.
 
+    :param pred: The predicted bounding box, shape (6,). Indices 1:5 are box coordinates.
+    :type pred: torch.Tensor
+    :param gt: Ground truth bounding boxes, shape (num_gt, 5). Indices 1:5 are box coordinates.
+    :type gt: torch.Tensor
+    :return: IoU values between the predicted box and each ground truth box.
+    :rtype: torch.Tensor
+    '''
+
+    # Extract coordinates, these are expected in x1, y1, x2, y2 format
     px1, py1, px2, py2 = pred[1:5]
 
     gcx = gt[:, 1]
@@ -19,6 +26,7 @@ def pairwise_iou(pred, gt):
     gx2, gy2 = gcx + gw / 2, gcy + gh / 2
     gx1 *= 640; gx2 *= 640
     gy1 *= 640; gy2 *= 640
+
     # calculate intersection
     inter_x1 = torch.max(px1, gx1)
     inter_y1 = torch.max(py1, gy1)
@@ -27,6 +35,7 @@ def pairwise_iou(pred, gt):
     inter_w = torch.clamp(inter_x2 - inter_x1, min=0)
     inter_h = torch.clamp(inter_y2 - inter_y1, min=0)
     inter_area = inter_w * inter_h
+
     # calculate union
     pw = px2 - px1
     ph = py2 - py1
@@ -36,13 +45,33 @@ def pairwise_iou(pred, gt):
     iou = inter_area / (union_area + 1e-7)
     return iou
 
-def calculate_AP_per_class(gt, preds, gt_to_img, preds_to_img, iou_thresh, device = "cuda", 
-                           plot_pr = False, class_id = 0):
+def calculate_AP_per_class(gt: torch.Tensor, preds: torch.Tensor, gt_to_img: torch.Tensor, 
+                           preds_to_img: torch.Tensor, iou_thresh: float, 
+                           device: str = "cuda"):
+    '''Calculate Average Precision (AP), precision, and recall for a single class.
 
+    :param gt: Ground truth boxes for the class.
+    :type gt: torch.Tensor
+    :param preds: Predicted boxes for the class.
+    :type preds: torch.Tensor
+    :param gt_to_img: Mapping from ground truth boxes to image IDs.
+    :type gt_to_img: torch.Tensor
+    :param preds_to_img: Mapping from predicted boxes to image IDs.
+    :type preds_to_img: torch.Tensor
+    :param iou_thresh: IoU threshold for matching predictions to ground truth.
+    :type iou_thresh: float
+    :param device: Device to run calculations on. Defaults to "cuda".
+    :type device: str
+    :return: AP, precision, and recall for the class.
+    :rtype: tuple
+    '''
+
+    # initialize the true positive, false positive, precision and recall for accumulating metrics
     tp = torch.zeros(preds.shape[0], dtype=torch.float32).to(device)
     fp = torch.zeros(preds.shape[0], dtype=torch.float32).to(device)
     precision = torch.zeros(preds.shape[0], dtype=torch.float32).to(device)
     recall = torch.zeros(preds.shape[0], dtype=torch.float32).to(device)
+
     num_gt = gt.shape[0]
     gt_matched = torch.zeros(gt.shape[0], dtype = torch.bool).to(device)
     for i, pred in enumerate(preds):
@@ -87,19 +116,6 @@ def calculate_AP_per_class(gt, preds, gt_to_img, preds_to_img, iou_thresh, devic
         # no change in recall, return 0 AP
         return torch.tensor(0.0, device=device)
     ap  = torch.sum((mrec[chg + 1] - mrec[chg]) * mpre[chg + 1])
-    if plot_pr:
-        mrec = mrec.cpu().numpy()
-        mpre = mpre.cpu().numpy()
-        class_names = ["coat", "no-coat", "eyewear", "no-eyewear"]
-        #plt.figure(figsize = (5,5))
-        #plt.step(mrec, mpre, where="post", label = f"Class {class_id} AP: {ap:.4f}")
-        #plt.xlabel("Recall")
-        #plt.ylabel("Precision")
-        #plt.title(f"Precision-Recall Curve for Class {class_id}")
-        #plt.xlim(0,1); plt.ylim(0,1)
-        #plt.legend()
-        #plt.savefig(f"output_images/class_{class_names[class_id]}_pr_curve.png")
-        print("saved plt")
     TP = tp.sum().item()
     FP = fp.sum().item()
     precision_item = TP / (TP + FP + 1e-9)
@@ -108,8 +124,29 @@ def calculate_AP_per_class(gt, preds, gt_to_img, preds_to_img, iou_thresh, devic
 
 # gt is a list of the ground truth boxes, preds is a list of predicted boxes+confidence
 def calculate_mAP(img_ids: torch.Tensor, gts: torch.Tensor, preds: torch.Tensor, 
-                  num_classes = 4, iou_thresh = 0.5, device = "cuda", plot_pr = False, writer = None, 
-                  epoch = 0):
+                  num_classes = 4, iou_thresh = 0.5, 
+                  device = "cuda", writer = None, epoch = 0):
+    '''Calculate mean Average Precision (mAP) across all classes.
+
+    :param img_ids: Tensor of image IDs.
+    :type img_ids: torch.Tensor
+    :param gts: Ground truth boxes for all images.
+    :type gts: torch.Tensor
+    :param preds: Predicted boxes for all images.
+    :type preds: torch.Tensor
+    :param num_classes: Number of classes. Defaults to 4.
+    :type num_classes: int
+    :param iou_thresh: IoU threshold for matching predictions to ground truth. Defaults to 0.5.
+    :type iou_thresh: float
+    :param device: Device to run calculations on. Defaults to "cuda".
+    :type device: str
+    :param writer: Optional writer for logging metrics. Defaults to None.
+    :type writer: object
+    :param epoch: Epoch number for logging. Defaults to 0.
+    :type epoch: int
+    :return: Mean Average Precision (mAP) across all classes.
+    :rtype: float
+    '''
 
     # a mapping from ground truth boxes to their img id
     # used to ensure predictions are being compared only to the same image
@@ -149,7 +186,7 @@ def calculate_mAP(img_ids: torch.Tensor, gts: torch.Tensor, preds: torch.Tensor,
             continue
         AP, precision, recall = calculate_AP_per_class(true_gt[gt_class_mask], final_preds[pred_class_mask], 
                                gt_to_img[gt_class_mask], preds_to_img[pred_class_mask],
-                               iou_thresh, device=device, plot_pr=plot_pr, class_id=i)
+                               iou_thresh, device=device)
         if writer is not None:
             writer.add_scalar(f"AP/{classes[i]}", AP, global_step=epoch)
             writer.add_scalar(f"Precision/{classes[i]}", precision, global_step=epoch)
@@ -163,9 +200,15 @@ def calculate_mAP(img_ids: torch.Tensor, gts: torch.Tensor, preds: torch.Tensor,
         writer.add_scalar("Recall/Overall", total_recall / num_classes, global_step=epoch)
     return total_ap / num_classes
 
-def post_process_img(output, confidence_threshold = 0.25, iou_threshold = 0.5, use_batched_nms = True) -> torch.Tensor:
-    ''' This function expects the output to be in pixel values and sigmoid to already be applied
-    to obj and class probabilities.'''
+def post_process_img(output: torch.Tensor, confidence_threshold: float = 0.25, iou_threshold: float = 0.5) -> torch.Tensor:
+    '''This function expects the output to be in pixel values and sigmoid to already be applied
+    to obj and class probabilities.
+
+    :param torch.Tensor output: The model's output on a given image.
+    :param float confidence_threshold: The confidence threshold for filtering predictions. Defaults to 0.25
+    :param float iou_threshold: The IoU threshold for filtering predictions. Defaults to 0.5
+    :return torch.Tensor: The processed predictions in x1 y1 x2 y2 format (top left and bottom right points)
+    '''
     x1 = output[..., 0:1] - output[..., 2:3] / 2
     y1 = output[..., 1:2] - output[..., 3:4] / 2
     x2 = output[..., 0:1] + output[..., 2:3] / 2
@@ -197,6 +240,15 @@ def post_process_img(output, confidence_threshold = 0.25, iou_threshold = 0.5, u
 
 
 def _box_iou(boxes1: torch.Tensor, boxes2: torch.Tensor) -> torch.Tensor:
+    '''Compute the IoU matrix between two sets of axis-aligned bounding boxes.
+
+    :param boxes1: First set of boxes in (x1, y1, x2, y2) format.
+    :type boxes1: torch.Tensor
+    :param boxes2: Second set of boxes in (x1, y1, x2, y2) format.
+    :type boxes2: torch.Tensor
+    :return: IoU matrix of shape (N, M) where N and M are the number of boxes in boxes1 and boxes2.
+    :rtype: torch.Tensor
+    '''
     """
     Vectorized IoU for two -sets- of axis-aligned boxes.
     boxes{1,2}: (N, 4) or (M, 4) in XYXY format (x1, y1, x2, y2)
@@ -221,6 +273,17 @@ def _box_iou(boxes1: torch.Tensor, boxes2: torch.Tensor) -> torch.Tensor:
 
 
 def nms(boxes: torch.Tensor, scores: torch.Tensor, iou_threshold: float) -> torch.Tensor:
+    '''Perform Non-Maximum Suppression (NMS) on bounding boxes.
+
+    :param boxes: Bounding boxes in (x1, y1, x2, y2) format.
+    :type boxes: torch.Tensor
+    :param scores: Confidence scores for each box.
+    :type scores: torch.Tensor
+    :param iou_threshold: IoU threshold for suppressing overlapping boxes.
+    :type iou_threshold: float
+    :return: Indices of boxes that survive NMS, sorted by descending score.
+    :rtype: torch.Tensor
+    '''
     """
     Pure-PyTorch Non-Maximum Suppression mirroring
     torchvision.ops.nms(...).
@@ -271,4 +334,4 @@ if __name__ == "__main__":
         img_ids, imgs, gts = img_ids.to(device), imgs.to(device), gts.to(device)  
         with torch.no_grad():
             outputs = model(imgs)
-        mAP = calculate_mAP(img_ids, gts, outputs, num_classes=4, iou_thresh=0.5, device=device, plot_pr=True)
+        mAP = calculate_mAP(img_ids, gts, outputs, num_classes=4, iou_thresh=0.5, device=device)
