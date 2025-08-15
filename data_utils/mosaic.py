@@ -8,22 +8,40 @@ import os
 import random
 
 class Mosaic(nn.Module):
-    def __init__(self, include_eyewear = True):
+    def __init__(self, excluded_classes = []):
+        '''
+        Initialize Mosaic augmentation module.
+
+        :param excluded_classes: List of class IDs to exclude from labels. Defaults to an empty list.
+        :type excluded_classes: list
+        '''
         super(Mosaic, self).__init__()
-        self.include_eyewear = include_eyewear
-        
-    def resize_and_pad_img(self, img, labels, output_width, output_height):
-        
+        self.excluded_classes = excluded_classes
+
+    def resize_and_pad_img(self, img: np.ndarray, labels: torch.Tensor, output_width: int, output_height: int) -> tuple:
+        '''
+        Resize and pad an image to the target dimensions, adjusting labels accordingly.
+
+        :param img: Input image as a numpy array.
+        :type img: np.ndarray
+        :param labels: Corresponding labels for the image.
+        :type labels: torch.Tensor
+        :param output_width: Target width after resizing and padding.
+        :type output_width: int
+        :param output_height: Target height after resizing and padding.
+        :type output_height: int
+        :return: Tuple of (resized and padded image as torch.Tensor, adjusted labels as torch.Tensor).
+        :rtype: tuple
+        '''
         new_img = torch.from_numpy(img).float() 
         new_img = einops.rearrange(new_img, "h w c -> c h w")
         height, width = new_img.shape[1:]
 
         scale = min(output_width / width, output_height / height)
 
-        if scale < 1:
-            new_width, new_height = int(width * scale), int(height * scale)
-        else:
-            new_width, new_height = width, height
+        scale = scale if scale <= 1 else 1
+
+        new_width, new_height = int(width * scale), int(height * scale)
 
         # shrink down the img if it's smaller, otherwise just pad
         new_img = F.interpolate(new_img.unsqueeze(0), size=(new_height, new_width), mode='bilinear', align_corners=False)
@@ -37,58 +55,54 @@ class Mosaic(nn.Module):
         new_img = F.pad(new_img, (pad_left, pad_right, pad_top, pad_bottom), value=114.0)
 
         # scale labels up to pixel coords, scale by the same refactoring, add padding, then normalize
-        if scale < 1:
-            if labels.any():
-                labels[..., 1] = (labels[..., 1] * width * scale + pad_left) / output_width   # xc
-                labels[..., 2] = (labels[..., 2] * height * scale + pad_top) / output_height  # yc
-                labels[..., 3] = (labels[..., 3] * width * scale) / output_width              # w
-                labels[..., 4] = (labels[..., 4] * height * scale) / output_height             # h
-        else:
-            if labels.any():
-                labels[..., 1] = (labels[..., 1] * width + pad_left) / output_width   # xc
-                labels[..., 2] = (labels[..., 2] * height + pad_top) / output_height  # yc
-                labels[..., 3] = (labels[..., 3] * width) / output_width              # w
-                labels[..., 4] = (labels[..., 4] * height) / output_height             # h
+        if labels.any():
+            labels[..., 1] = (labels[..., 1] * width * scale + pad_left) / output_width   # xc
+            labels[..., 2] = (labels[..., 2] * height * scale + pad_top) / output_height  # yc
+            labels[..., 3] = (labels[..., 3] * width * scale) / output_width              # w
+            labels[..., 4] = (labels[..., 4] * height * scale) / output_height             # h
 
         return new_img.squeeze(0), labels
     
-    def read_img_and_labels(self, img_path):
+    def read_img_and_labels(self, img_path: str) -> tuple:
+        '''
+        Read an image and its corresponding label file, filtering eyewear classes if needed.
 
+        :param img_path: Path to the image file.
+        :type img_path: str
+        :return: Tuple of (image as np.ndarray, labels as np.ndarray).
+        :rtype: tuple
+        '''
         new_img = cv2.imread(img_path)
         lbl_path = img_path.replace('/images/', '/labels/').rsplit('.', 1)[0] + '.txt'
-        if os.stat(lbl_path).st_size == 0:
+        if not os.path.exists(lbl_path) or os.stat(lbl_path).st_size == 0:
             label = np.empty((0, 5), dtype=np.float32)  # empty tensor for no labels
         else:
             label = np.loadtxt(lbl_path, dtype=np.float32)
             if label.ndim == 1:
                 label = label.reshape(1, -1)
 
-        if not self.include_eyewear:
-            mask = (label[:, 0] != 2) & (label[:, 0] != 3)
+        for excluded_cls in self.excluded_classes:
+            mask = (label[:, 0] != excluded_cls)
             label = label[mask]
 
         return new_img, label
 
-    def forward(self, img, labels, img_paths, output_size=640):
-        """
+    def forward(self, img: torch.Tensor, labels: torch.Tensor, img_paths: list, output_size: int = 640) -> tuple:
+        '''
         Apply mosaic augmentation to a batch of images and their corresponding labels.
-        
-        Args:
-            img (torch.Tensor): Image in shape (C, H, W). img should already be resized to the desired output size.
-            img_paths (list of str): List of image file paths corresponding to the 3 random 
-            images to be used in the mosaic. The paths should point to the original images, not to the resized
-            imgs (list of torch.Tensor): List of images in shape (C, H, W) to be used in the mosaic.
-            labels (list of torch.Tensor): List of labels in shape (num_boxes, 4).
-            Formatted in (cx, cy, w, h) where cx, cy are normalized center coordinates and w, h are normalized width and height.
-            output_size (int): Size to which the mosaic image will be resized.
-        
-        Returns:
-            torch.Tensor: Mosaic image.
-            torch.Tensor: Corresponding labels for the mosaic image.
-        """
 
+        :param img: Main image tensor of shape (C, H, W), already resized to output size.
+        :type img: torch.Tensor
+        :param labels: Labels for the main image, shape (num_boxes, 5).
+        :type labels: torch.Tensor
+        :param img_paths: List of image file paths for the 3 random images to use in the mosaic.
+        :type img_paths: list[str]
+        :param output_size: Size to which the mosaic image will be cropped and padded. Defaults to 640.
+        :type output_size: int
+        :return: Tuple of (mosaic image as torch.Tensor, corresponding labels as torch.Tensor).
+        :rtype: tuple
+        '''
         # Ensure input is a list of images and labels
-
         if type(labels) == np.ndarray:        
             labels = torch.from_numpy(labels)
         indices = torch.randperm(len(img_paths))[:3]
@@ -100,10 +114,8 @@ class Mosaic(nn.Module):
         for i in indices:
             new_img, label = self.read_img_and_labels(img_paths[i])
             new_img, label = self.resize_and_pad_img(new_img, label, output_width=width, output_height=height)
-            
             assert(new_img.shape[1:] == img.shape[1:])
             imgs.append(new_img.squeeze(0))
-
             lbl_list.append(torch.from_numpy(label))
 
         top = torch.cat((img, imgs[0]), dim=2)  # Concatenate horizontally

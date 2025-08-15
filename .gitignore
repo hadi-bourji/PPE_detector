@@ -15,3 +15,10 @@ data_aug/
 onnx/
 *.mp4
 engines/
+model_checkpoints_old/
+logs/
+logs_old
+logs_rich/
+logs_rich_old/
+logsqat/
+poster_logging/

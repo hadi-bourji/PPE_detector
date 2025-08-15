@@ -1,6 +1,6 @@
 import cv2
 import torch
-from yolox.test_weights import load_pretrained_weights, download_weights 
+from yolox.handle_weights import load_pretrained_weights, download_weights 
 from yolox.model import create_yolox_s, create_yolox_l, create_yolox_m
 import einops
 from data_utils.metrics import post_process_img
@@ -42,7 +42,7 @@ def process_frame(frame, device = 'cuda', output_size = 640):
 
 
 def draw_ppe(n, outputs):
-    edge_colors = [(0,255,0),(0,0,255), (255,255,0), (0,255,255), (255, 0, 255), (180, 180, 255)]
+    edge_colors = [(255,255,255),(0,0,255), (255,0, 255), (0,255,255), (255, 255, 0), (190, 190, 255)]
     class_names = ["coat", "no-coat", "eyewear", "no-eyewear", "gloves", "no-gloves"]
     for label in outputs:
         c, x1, y1, x2, y2, s = label
@@ -102,41 +102,34 @@ def draw_reg_yolo(n, outputs):
             cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0,0,0), 1, cv2.LINE_AA)
     return n
 
-start = time.time()
 print("Starting video capture...")
 cap = cv2.VideoCapture(0, cv2.CAP_DSHOW)
+cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
+cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 360)
 cv2.namedWindow('main', cv2.WINDOW_NORMAL)
+cv2.setWindowProperty("main", cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
 
-# weight_path = "model_checkpoints/yolox_m_uaTrue_nc4_ep15_bs8_lr1e-04_wd5e-04_07-08_14.pth"
-# BEST MODEL
-weight_path = "model_checkpoints\\yolox_m_nc4_ep300_bs8_lr1e-04_wd5e-04_07-08_10_ce100.pth"
 
-# weight_path = "model_checkpoints\\yolox_s_nc4_ep300_bs16_lr1e-04_wd5e-04_07-08_00.pth"
+weight_path = "model_checkpoints\\yolox_m_uaTrue_transformsTrue_dn()_nc6_ep300_bs8_lr1e-04_wd5e-04_07-30_02.pth"
 
-# no eyewear 200ep
-# weight_path = "model_checkpoints\\yolox_s_nc2_ep200_bs32_lr1e-03_wd5e-04_07-03_12.pth"
-
-# regular, good yolo 200ep
-# weight_path = 'model_checkpoints\\yolox_s_ep200_bs32_lr1e-03_wd5e-04_07-02_11.pth'
-# weight_path = download_weights('yolox_s.pth')
-# weight_path = "model_checkpoints\\yolox_m_uaTrue_nc6_ep200_bs8_lr1e-04_wd5e-04_07-15_19_ce150.pth"
-
+start = time.perf_counter()
 if not cap.isOpened():
     print("Error: Could not open video.")
     exit()
 
-print(f"Video opened successfully after {time.time() - start:.2f} seconds.")
 
 # coat, no-coat, eyewear, no-eyewear
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 print(f"Using device: {device}")
 frame_count = 0
 start = time.time()
-num_classes = 4
+num_classes = 6
 ppe_yolo = create_yolo(num_classes = num_classes, device = device, weight_path = weight_path, 
                        use_pretrained_yolo = False, yolo_type='m')
-reg_yolo = create_yolo(num_classes = 80, device = device, weight_path = "yolox\\yolox_m.pth", 
-                       use_pretrained_yolo = True, yolo_type='m')
+# Uncomment if you want to use a second YOLO model
+# To get the yolox weights, you can use the download_weights function imported above
+# reg_yolo = create_yolo(num_classes = 80, device = device, weight_path = "yolox\\yolox_m.pth", 
+#                        use_pretrained_yolo = True, yolo_type='m')
 
 while True:
     ret, frame = cap.read()
@@ -148,20 +141,20 @@ while True:
 
     with torch.no_grad():
         outputs1 = ppe_yolo(img)
-        outputs1 = post_process_img(outputs1[0], confidence_threshold=0.5, iou_threshold=0.5, use_batched_nms=False)
-        outputs2 = reg_yolo(img)
-        outputs2 = post_process_img(outputs2[0], confidence_threshold=0.5, iou_threshold=0.5, use_batched_nms=False)
+        outputs1 = post_process_img(outputs1[0], confidence_threshold=0.5, iou_threshold=0.5)
+        # outputs2 = reg_yolo(img)
+        # outputs2 = post_process_img(outputs2[0], confidence_threshold=0.5, iou_threshold=0.5)
 
     img = img.squeeze(0)
     n = einops.rearrange(img, "c h w -> h w c").cpu().numpy().copy().astype(np.uint8)
     outputs1 = outputs1.cpu().numpy()
-    outputs2 = outputs2.cpu().numpy()
+    # outputs2 = outputs2.cpu().numpy()
 
     n = draw_ppe(n, outputs1)
-    n = draw_reg_yolo(n, outputs2)
+    # n = draw_reg_yolo(n, outputs2)
 
     if frame_count % 30 == 0:
-        elapsed_time = time.time() - start
+        elapsed_time = time.perf_counter() - start
         fps = frame_count / elapsed_time
         print(f"Avg. FPS: {fps:.2f}")
     
