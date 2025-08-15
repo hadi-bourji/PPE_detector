@@ -3,9 +3,8 @@ import os, time, pathlib, cv2, torch, numpy as np, tensorrt as trt
 import einops
 import torch.nn.functional as F
 
-ONNX_PATH_PPE   = os.path.join("onnx", "qat_m.onnx")
-ENGINE_PATH_PPE =  os.path.join("engines", "fp16.plan") 
-print("using engine: ", ENGINE_PATH_PPE)
+ONNX_PATH_PPE   = os.path.join("onnx", "ft6.onnx")
+ENGINE_PATH_PPE =  os.path.join("engines", "ft6.plan") 
 ONNX_PATH_REGULAR = os.path.join("onnx", "yolox_s.onnx")
 ENGINE_PATH_REGULAR = os.path.join("engines", "yolox_m_int8+fp16.plan")
 CONF_TH     = 0.50
@@ -31,7 +30,7 @@ def draw_reg_yolo(n, outputs):
     "microwave", "oven", "toaster", "sink", "refrigerator",
     "book", "clock", "vase", "scissors", "teddy bear", "hair drier", "toothbrush"
     ]
-    cell_phone_color = (255, 255, 255)
+    color = (68,182,235)
     outputs = outputs[outputs[:,0] == 67]
 
     for label in outputs:
@@ -43,18 +42,17 @@ def draw_reg_yolo(n, outputs):
         x2 = int(x2)
         y2 = int(y2)
         text = f"cell phone {s:.2f}"
-        color = cell_phone_color
 
         cv2.rectangle(n, (x1, y1), (x2, y2), color, 1)
         (tw, th), _ = cv2.getTextSize(text, cv2.FONT_HERSHEY_SIMPLEX,
                                     fontScale=0.5, thickness=1)
         cv2.rectangle(n, (x1, y1 - th - 4), (x1 + tw, y1), color, -1)   # filled bg
         cv2.putText(n, text, (x1, y1 - 2),
-            cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0,0,0), 1, cv2.LINE_AA)
+            cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0,0,0), 1, cv2.LINE_AA, )
     return n
 
 def draw_ppe(n, outputs):
-    edge_colors = [(0,255,0),(0,0,255), (255,255,0), (0,255,255), (255, 0, 255), (180, 180, 255)]
+    edge_colors = [(255,255,255),(0,0,255), (255, 0, 255),(0,255,255), (255,255,0), (180, 180, 255)]
     class_names = ["coat", "no-coat", "eyewear", "no-eyewear", "gloves", "no-gloves"]
     for label in outputs:
         c, x1, y1, x2, y2, s = label
@@ -85,10 +83,11 @@ def process_frame(frame, device = 'cuda', output_size = 640):
     img = einops.rearrange(frame, 'h w c -> c h w')  # Change to CHW format
     img = torch.from_numpy(img).float().to(device)
 
-    new_height, new_width = img.shape[1:]
-    # scale = min(output_size / width, output_size / height)
-    # new_width, new_height = int(width * scale), int(height * scale)
-    # img = F.interpolate(img.unsqueeze(0), size=(new_height, new_width), mode='bilinear', align_corners=False)
+    #new_height, new_width = img.shape[1:]
+    height, width = img.shape[1:]
+    scale = min(output_size / width, output_size / height)
+    new_width, new_height = int(width * scale), int(height * scale)
+    img = F.interpolate(img.unsqueeze(0), size=(new_height, new_width), mode='bilinear', align_corners=False)
 
     # pad with grey (114, 114, 114), not normalized
     pad_top = (output_size - new_height) // 2
@@ -97,7 +96,7 @@ def process_frame(frame, device = 'cuda', output_size = 640):
     pad_right = output_size - new_width - pad_left        
 
     img = F.pad(img, (pad_left, pad_right, pad_top, pad_bottom), value = 114.0)
-    return img, (pad_top, pad_bottom, pad_left, pad_right)
+    return img.squeeze(0), (pad_top, pad_bottom, pad_left, pad_right)
 
 
 def post_process_img(output, confidence_threshold = 0.25, iou_threshold = 0.5) -> torch.Tensor:
@@ -229,6 +228,9 @@ def build_engine(onnx_path: str, engine_path: str, precision = "fp16") -> trt.IC
     if "int8" in precision:
         print("building with int8")
         config.set_flag(trt.BuilderFlag.INT8)
+    if "fp8" in precision:
+        print("building with fp8")
+        config.set_flag(trt.BuilderFlag.FP8)
 
     print("Building TensorRT engine …")
     serialized_engine = builder.build_serialized_network(network, config)
@@ -248,7 +250,7 @@ def build_engine(onnx_path: str, engine_path: str, precision = "fp16") -> trt.IC
 def main():
 
     print("building...")
-    engine_ppe = build_engine(ONNX_PATH_PPE, ENGINE_PATH_PPE)
+    engine_ppe = build_engine(ONNX_PATH_PPE, ENGINE_PATH_PPE, precision=["fp16"])
     engine_reg = build_engine(ONNX_PATH_REGULAR, ENGINE_PATH_REGULAR)
 
     context_ppe = engine_ppe.create_execution_context()
@@ -287,17 +289,27 @@ def main():
     cap = cv2.VideoCapture(0)
     if not cap.isOpened():
         raise RuntimeError("Camera open failed")
-    cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
-    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 360)
-    cv2.namedWindow("YOLO-TensorRT", cv2.WINDOW_NORMAL)
+    cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
+    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
+    cv2.namedWindow("trt", cv2.WINDOW_NORMAL)
+    cv2.setWindowProperty("trt",
+            cv2.WND_PROP_FULLSCREEN,
+            cv2.WINDOW_FULLSCREEN)
+
     frame_count, t0 = 0, time.time()
+
+    run=0
+    count=0
 
     while True:
         ok, frame = cap.read()
         if not ok:
             break
 
+        count+=1
+
         frame_count += 1
+        frame = cv2.flip(frame, 0)
         img, _ = process_frame(frame, device="cuda", output_size=INPUT_SIZE)  # cpu tensor
         inp_torch_ppe.copy_(img)                      # H2D via unified memory
         inp_torch_reg.copy_(img)
@@ -318,26 +330,32 @@ def main():
             preds_ppe[0], confidence_threshold=CONF_TH, iou_threshold=IOU_TH
         ).cpu().numpy()
 
+
         if processed_preds_ppe.any():
+            # print("HELLO")
             processed_preds_ppe[..., 2] = processed_preds_ppe[..., 2] - 140
             processed_preds_ppe[..., 4] = processed_preds_ppe[..., 4] - 140
+            processed_preds_ppe[..., 1:5] *= 2
 
         processed_preds_reg = post_process_img(
-            preds_reg[0], confidence_threshold=CONF_TH, iou_threshold=IOU_TH
+            preds_reg[0], confidence_threshold=0.25, iou_threshold=IOU_TH
         ).cpu().numpy()
  
         if processed_preds_reg.any():
             processed_preds_reg[..., 2] = processed_preds_reg[..., 2] - 140
             processed_preds_reg[..., 4] = processed_preds_reg[..., 4] - 140
+            processed_preds_reg[..., 1:5] *= 2
 
+        # if count % 60 == 0:
+        #    cv2.imwrite(f"imgs4/{count}_img.jpg", frame)
         vis = draw_ppe(frame, processed_preds_ppe)       # draw on original BGR frame
         vis = draw_reg_yolo(frame, processed_preds_reg)
 
-        cv2.imshow("YOLO-TensorRT", vis)
+        cv2.imshow("trt", vis)
         if cv2.waitKey(1) & 0xFF == ord('q'):           # q quits
             break
 
-        if frame_count == 60:
+        if frame_count == 600:
             fps = frame_count / (time.time() - t0)
             t0 = time.time()
             frame_count = 0
