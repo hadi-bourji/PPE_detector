@@ -1,5 +1,4 @@
 import torch
-from .ppe_dataset import PPE_DATA
 from yolox.model import create_yolox_s
 from yolox.handle_weights import load_pretrained_weights
 
@@ -321,17 +320,3 @@ def nms(boxes: torch.Tensor, scores: torch.Tensor, iou_threshold: float) -> torc
 
     return torch.as_tensor(keep, dtype=torch.long, device=boxes.device)
 
-if __name__ == "__main__":
-    device = "cuda"
-    dataset = PPE_DATA(data_path="./data", mode="val")
-    loader = torch.utils.data.DataLoader(dataset, batch_size=16, shuffle=False)
-    model = create_yolox_s(num_classes=4)
-    weight_path = "/home/mattb709/projects/ML/PPEDetection/model_checkpoints/yolox_s_ep50_bs16_lr1e-03_wd5e-04_06-27_09.pth"
-    model = load_pretrained_weights(model, weight_path, num_classes=4, remap = False)
-    model.eval().to(device)
-    for batch in loader:
-        img_ids, imgs, gts = batch
-        img_ids, imgs, gts = img_ids.to(device), imgs.to(device), gts.to(device)  
-        with torch.no_grad():
-            outputs = model(imgs)
-        mAP = calculate_mAP(img_ids, gts, outputs, num_classes=4, iou_thresh=0.5, device=device)
