@@ -1,0 +1,174 @@
+import tkinter as tk
+from PIL import Image, ImageTk
+import os
+
+DATA_DIR = "./images"  # image directory
+CAMERAS = ["camera_1", "camera_2", "camera_3"]
+OBJECTS = ["coats", "gloves", "glasses", "cell_phone"]
+
+# loads images from folder
+def get_images(camera, obj, date):
+    folder = os.path.join(DATA_DIR, camera, obj, date)
+    if not os.path.exists(folder):
+        return []
+    return [os.path.join(folder, f) for f in os.listdir(folder) if f.endswith((".png", ".jpg"))]
+
+class PPEViewer(tk.Tk):
+    def __init__(self):
+        super().__init__()
+        self.title("Houston Lab PPE Viewer")
+        self.geometry("1000x700")
+        self.current_camera = None
+        self.current_object = None
+        self.current_date = None
+        self.image_refs = []  # store PhotoImage refs to prevent garbage collection
+
+        # Container frame
+        self.container = tk.Frame(self)
+        self.container.pack(fill="both", expand=True)
+
+        # Initialize pages
+        self.pages = {}
+        for Page in (Page1, Page2, Page3):
+            page = Page(parent=self.container, controller=self)
+            self.pages[Page] = page
+            page.grid(row=0, column=0, sticky="nsew")
+
+        self.show_page(Page1)
+
+    def show_page(self, page_class):
+        page = self.pages[page_class]
+        page.tkraise()
+
+class Page1(tk.Frame):
+    def __init__(self, parent, controller):
+        super().__init__(parent)
+        self.controller = controller
+
+        tk.Label(self, text="Select a Camera", font=("Arial", 20)).pack(pady=20)
+
+        for cam in CAMERAS:
+            btn = tk.Button(self, text=cam, width=20, command=lambda c=cam: self.select_camera(c))
+            btn.pack(pady=5)
+
+    def select_camera(self, camera):
+        self.controller.current_camera = camera
+        self.controller.show_page(Page2)
+
+class Page2(tk.Frame):
+    def __init__(self, parent, controller):
+        super().__init__(parent)
+        self.controller = controller
+
+        self.label = tk.Label(self, text="", font=("Arial", 20))
+        self.label.pack(pady=20)
+
+        self.buttons_frame = tk.Frame(self)
+        self.buttons_frame.pack(pady=10)
+
+        for obj in OBJECTS:
+            btn = tk.Button(self.buttons_frame, text=obj, width=20, command=lambda o=obj: self.select_object(o))
+            btn.pack(pady=5)
+
+        tk.Button(self, text="Back to Cameras",
+                  command=lambda: controller.show_page(Page1)).pack(side="bottom", pady=20)
+
+    def tkraise(self, *args, **kwargs):
+        super().tkraise(*args, **kwargs)
+        camera = self.controller.current_camera
+        self.label.config(text=f"Camera: {camera}")
+
+    def select_object(self, obj):
+        self.controller.current_object = obj
+        self.controller.show_page(Page3)
+
+class Page3(tk.Frame):
+    def __init__(self, parent, controller):
+        super().__init__(parent)
+        self.controller = controller
+
+        self.label = tk.Label(self, text="", font=("Arial", 20))
+        self.label.pack(pady=10)
+
+        tk.Label(self, text="Select a Date:").pack(pady=5)
+
+        # Scrollable listbox for dates
+        self.listbox_frame = tk.Frame(self)
+        self.listbox_frame.pack(pady=5, fill="x")
+        self.date_listbox = tk.Listbox(self.listbox_frame, height=10)
+        self.date_scrollbar = tk.Scrollbar(self.listbox_frame, orient="vertical", command=self.date_listbox.yview)
+        self.date_listbox.config(yscrollcommand=self.date_scrollbar.set)
+        self.date_listbox.pack(side="left", fill="x", expand=True)
+        self.date_scrollbar.pack(side="right", fill="y")
+
+        self.date_listbox.bind("<<ListboxSelect>>", self.load_images_from_listbox)
+
+        # Image display area (scrollable)
+        self.images_frame = tk.Frame(self)
+        self.images_frame.pack(pady=10, fill="both", expand=True)
+        self.canvas = tk.Canvas(self.images_frame)
+        self.scrollbar = tk.Scrollbar(self.images_frame, orient="vertical", command=self.canvas.yview)
+        self.scrollable_frame = tk.Frame(self.canvas)
+        self.scrollable_frame.bind(
+            "<Configure>",
+            lambda e: self.canvas.configure(scrollregion=self.canvas.bbox("all"))
+        )
+        self.canvas.create_window((0, 0), window=self.scrollable_frame, anchor="nw")
+        self.canvas.configure(yscrollcommand=self.scrollbar.set)
+        self.canvas.pack(side="left", fill="both", expand=True)
+        self.scrollbar.pack(side="right", fill="y")
+
+        tk.Button(self, text="Back to Objects",
+                  command=lambda: controller.show_page(Page2)).pack(side="bottom", pady=10)
+
+    def tkraise(self, *args, **kwargs):
+        super().tkraise(*args, **kwargs)
+        cam = self.controller.current_camera
+        obj = self.controller.current_object
+        self.label.config(text=f"{obj} in {cam}")
+
+        # Populate listbox with available dates
+        self.date_listbox.delete(0, tk.END)
+        date_dir = os.path.join(DATA_DIR, cam, obj)
+        if os.path.exists(date_dir):
+            dates = sorted(os.listdir(date_dir))
+            for d in dates:
+                self.date_listbox.insert(tk.END, d)
+
+        for widget in self.scrollable_frame.winfo_children():
+            widget.destroy()
+        self.controller.image_refs.clear()
+
+    def load_images_from_listbox(self, event=None):
+        selection = self.date_listbox.curselection()
+        if not selection:
+            return
+        date = self.date_listbox.get(selection[0])
+        self.controller.current_date = date
+        cam = self.controller.current_camera
+        obj = self.controller.current_object
+
+        for widget in self.scrollable_frame.winfo_children():
+            widget.destroy()
+        self.controller.image_refs.clear()
+
+        image_paths = get_images(cam, obj, date)
+        if not image_paths:
+            tk.Label(self.scrollable_frame, text="No images found").pack()
+            return
+
+        for path in image_paths:
+            try:
+                img = Image.open(path)
+                img.thumbnail((300, 300))
+                photo = ImageTk.PhotoImage(img)
+                self.controller.image_refs.append(photo)
+                tk.Label(self.scrollable_frame, image=photo).pack(pady=5)
+                tk.Label(self.scrollable_frame, text=os.path.basename(path)).pack(pady=2)
+            except Exception as e:
+                print(f"Error loading {path}: {e}")
+
+
+if __name__ == "__main__":
+    app = PPEViewer()
+    app.mainloop()
