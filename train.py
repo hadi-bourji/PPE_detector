@@ -12,7 +12,7 @@ from datetime import datetime
 from tqdm import tqdm
 import os
 
-def train(num_classes = 4, num_epochs = 50, validate = True, batch_size = 16, max_gt=30, 
+def train(num_classes = 4, num_epochs = 50, validate = False, batch_size = 16, max_gt=30, 
           logging = True, device="cuda", lr = 0.001, weight_decay = 0.0005, save_epochs = [50, 100, 200, 250],
           use_amp = True, model_name = "yolox_m", data_name = "", apply_transforms = True):
 
@@ -44,7 +44,7 @@ def train(num_classes = 4, num_epochs = 50, validate = True, batch_size = 16, ma
     dataset = PPE_DATA(data_path=f"./data/{data_name}", mode="train", max_gt = max_gt, p_mosaic = 1 / batch_size, apply_transforms = apply_transforms)
     dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True, num_workers=8, pin_memory=True)
     if validate:
-        val_dataset = PPE_DATA(data_path="./data", mode="val")
+        val_dataset = PPE_DATA(data_path="./data/validation.txt", mode="val")
         val_dataloader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, num_workers=8)
 
     loss_fn = YOLOXLoss(num_classes=num_classes)
@@ -184,6 +184,6 @@ if __name__ == "__main__":
         save_epochs=[50, 100],
         use_amp=True,
         model_name="yolox_m",
-        data_name="data_389.txt",
+        data_name="train.txt",
         apply_transforms=False
     )

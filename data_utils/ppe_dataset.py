@@ -161,7 +161,8 @@ class PPE_DATA(Dataset):
         img = F.pad(img, (pad_left, pad_right, pad_top, pad_bottom), value = 114.0)
 
         # scale labels up to pixel coords, scale by the same refactoring, add padding, then normalize
-        if labels and labels.any():
+        # if labels and labels.any():
+        if labels is not None and labels.shape[0] > 0:    
             labels[..., 1] = (labels[..., 1] * width * scale + pad_left) / output_size   # xc
             labels[..., 2] = (labels[..., 2] * height * scale + pad_top ) / output_size   # yc
             labels[..., 3] = (labels[..., 3] * width * scale) / output_size              # w

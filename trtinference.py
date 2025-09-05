@@ -19,19 +19,6 @@ TRT_LOGGER  = trt.Logger(trt.Logger.WARNING)
 def draw_reg_yolo(n, outputs):
     """
     Draw COCO ``cell phone`` (class id 67) detections onto an image.
-
-    This filters ``outputs`` to rows where ``class_id == 67`` and renders
-    axis-aligned XYXY boxes with a score label. The image is modified in place
-    and also returned.
-
-    :param n: Target image in BGR order, shape ``(H, W, 3)``.
-    :type n: numpy.ndarray
-    :param outputs: Detections as ``(N, 6)`` in the form
-                    ``[class_id, x1, y1, x2, y2, score]`` (pixel coords).
-                    May be a ``torch.Tensor`` or ``numpy.ndarray``.
-    :type outputs: typing.Union[torch.Tensor, numpy.ndarray]
-    :return: The same image array with rectangles and labels drawn.
-    :rtype: numpy.ndarray
     """
     coco_classes = [
     "person", "bicycle", "car", "motorcycle", "airplane", "bus", "train", "truck", "boat",
@@ -71,18 +58,6 @@ def draw_reg_yolo(n, outputs):
 def draw_ppe(n, outputs):
     """
     Draw PPE detections (custom 6-class head) onto an image.
-
-    Expects class IDs in ``[0..5]`` mapping to:
-    ``["coat", "no-coat", "eyewear", "no-eyewear", "gloves", "no-gloves"]``.
-    Rows with class ``-1`` are skipped. The image is modified in place and also returned.
-
-    :param n: Target image in BGR order, shape ``(H, W, 3)``.
-    :type n: numpy.ndarray
-    :param outputs: Detections as ``(N, 6)`` = ``[class_id, x1, y1, x2, y2, score]`` (pixel coords).
-                    May be a ``torch.Tensor`` (``c.item()`` used) or ``numpy.ndarray``.
-    :type outputs: typing.Union[torch.Tensor, numpy.ndarray]
-    :return: The same image array with rectangles and labels drawn.
-    :rtype: numpy.ndarray
     """
     edge_colors = [(255,255,255),(0,0,255), (255, 0, 255),(0,255,255), (255,255,0), (180, 180, 255)]
     class_names = ["coat", "no-coat", "eyewear", "no-eyewear", "gloves", "no-gloves"]
@@ -108,25 +83,6 @@ def draw_ppe(n, outputs):
     return n
 
 def process_frame(frame, device = 'cuda', output_size = 640):
-    """
-    Convert a BGR frame to a CHW float tensor, resize to fit within ``output_size x output_size``,
-    pad with gray (114) to a square canvas, and return the padding used.
-
-    Pixel values are **not** normalized (remain in ``[0, 255]`` as ``float``). Aspect ratio is
-    preserved. Padding is returned as ``(pad_top, pad_bottom, pad_left, pad_right)``.
-
-    :param frame: Input image, shape ``(H, W, 3)`` in BGR, typically ``np.uint8``.
-    :type frame: numpy.ndarray
-    :param device: Device to place the output tensor on (e.g., ``"cuda"`` or ``"cpu"``).
-    :type device: str
-    :param output_size: Target square canvas size in pixels.
-    :type output_size: int
-    :return: Tuple ``(img, pads)`` where ``img`` is a tensor of shape ``3xoutput_sizexoutput_size``
-             (``torch.float32`` on ``device``) and ``pads`` is
-             ``(pad_top, pad_bottom, pad_left, pad_right)``.
-    :rtype: tuple[torch.Tensor, tuple[int, int, int, int]]
-    """
-
     # Preprocess the frame for YOLOX
     img = einops.rearrange(frame, 'h w c -> c h w')  # Change to CHW format
     img = torch.from_numpy(img).float().to(device)
@@ -151,26 +107,6 @@ def process_frame(frame, device = 'cuda', output_size = 640):
 def build_engine(onnx_path: str, engine_path: str, precision = ["fp16"]) -> trt.ICudaEngine:
     """
     Build (or load) a TensorRT engine from an ONNX model.
-
-    If ``engine_path`` exists, the serialized engine is deserialized and returned.
-    Otherwise the ONNX is parsed with explicit batch, the engine is built with the
-    requested precision flags, saved to ``engine_path``, and returned.
-
-    The following precision flags are set based on list matches in ``precision``:
-    ``"fp16"`` → :data:`trt.BuilderFlag.FP16`,
-    ``"int8"`` → :data:`trt.BuilderFlag.INT8`,
-    ``"fp8"`` → :data:`trt.BuilderFlag.FP8`.
-
-    :param onnx_path: Path to the ONNX model file.
-    :type onnx_path: str
-    :param engine_path: Path to save/load the serialized TensorRT engine (``.plan``).
-    :type engine_path: str
-    :param precision: Precision list indicating desired flags (e.g. ``"fp16"``, ``"int8"``).
-    :type precision: list
-    :return: A deserialized TensorRT engine ready to create execution contexts.
-    :rtype: trt.ICudaEngine
-    :raises Exception: If ONNX parsing fails.
-    :raises RuntimeError: If engine build fails.
     """
     if os.path.exists(engine_path):
         with open(engine_path, "rb") as f, trt.Runtime(TRT_LOGGER) as rt:
