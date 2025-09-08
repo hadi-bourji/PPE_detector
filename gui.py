@@ -4,7 +4,7 @@ import os
 
 DATA_DIR = "./images"  # image directory
 CAMERAS = ["camera_1", "camera_2", "camera_3"]
-OBJECTS = ["coats", "gloves", "glasses", "cell_phone"]
+OBJECTS = ["coat", "gloves", "glasses", "cell_phone"]
 
 # loads images from folder
 def get_images(camera, obj, date):
@@ -45,10 +45,11 @@ class Page1(tk.Frame):
         super().__init__(parent)
         self.controller = controller
 
-        tk.Label(self, text="Select a Camera", font=("Arial", 20)).pack(pady=20)
+        tk.Label(self, text="Select a camera to view.", font=("Arial", 20)).pack(pady=20)
 
         for cam in CAMERAS:
-            btn = tk.Button(self, text=cam, width=20, command=lambda c=cam: self.select_camera(c))
+            cam_label = cam.replace("_", " ").title()
+            btn = tk.Button(self, text=cam_label, width=20, command=lambda c=cam: self.select_camera(c))
             btn.pack(pady=5)
 
     def select_camera(self, camera):
@@ -63,11 +64,17 @@ class Page2(tk.Frame):
         self.label = tk.Label(self, text="", font=("Arial", 20))
         self.label.pack(pady=20)
 
+        
+        self.sub_label = tk.Label(self, text="Select an object to view violations.", font=("Arial", 16))
+        self.sub_label.pack(pady=(0, 15))  
+
+
         self.buttons_frame = tk.Frame(self)
         self.buttons_frame.pack(pady=10)
 
         for obj in OBJECTS:
-            btn = tk.Button(self.buttons_frame, text=obj, width=20, command=lambda o=obj: self.select_object(o))
+            obj_label = obj.replace("_", " ").title()
+            btn = tk.Button(self.buttons_frame, text=obj_label, width=20, command=lambda o=obj: self.select_object(o))
             btn.pack(pady=5)
 
         tk.Button(self, text="Back to Cameras",
@@ -76,7 +83,7 @@ class Page2(tk.Frame):
     def tkraise(self, *args, **kwargs):
         super().tkraise(*args, **kwargs)
         camera = self.controller.current_camera
-        self.label.config(text=f"Camera: {camera}")
+        self.label.config(text=f"Camera: {camera.replace("_", " ").title()}")
 
     def select_object(self, obj):
         self.controller.current_object = obj
@@ -90,7 +97,7 @@ class Page3(tk.Frame):
         self.label = tk.Label(self, text="", font=("Arial", 20))
         self.label.pack(pady=10)
 
-        tk.Label(self, text="Select a Date:").pack(pady=5)
+        tk.Label(self, text="Select a Date:", font=("Arial", 16)).pack(pady=5)
 
         # Scrollable listbox for dates
         self.listbox_frame = tk.Frame(self)
@@ -125,7 +132,7 @@ class Page3(tk.Frame):
         super().tkraise(*args, **kwargs)
         cam = self.controller.current_camera
         obj = self.controller.current_object
-        self.label.config(text=f"{obj} in {cam}")
+        self.label.config(text=f"{cam.replace("_", " ").title()} {obj.replace("_", " ")} violations.")
 
         # Populate listbox with available dates
         self.date_listbox.delete(0, tk.END)
