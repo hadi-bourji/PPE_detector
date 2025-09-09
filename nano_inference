@@ -331,7 +331,7 @@ def main():
     phone_count = 0
 
     violation_threshold = 30 #at 10 fps and 60 seconds == 600 frames in a minute
-    screenshot_dir = "/home/eurofins/ppe_violations/camera_1"
+    screenshot_dir = "/home/eurofins/ppe_violations/nano_camera"
 
     while True:
         ok, frame = cap.read()
@@ -414,7 +414,7 @@ def main():
             
         for label in violations:
             now = datetime.now()
-            date_str = now.strftime("%d-%m-%Y")
+            date_str = now.strftime("%m-%d-%Y")
             time_str = now.strftime("%H-%M-%S")
             
             save_dir = os.path.join(screenshot_dir, label, date_str)
@@ -432,13 +432,6 @@ def main():
             if label=="phone":
                 phone_count = 0
 	    
-	  	
-	    
-
-	    	
-
-        # if count % 60 == 0:
-        #    cv2.imwrite(f"imgs4/{count}_img.jpg", frame)
         vis = draw_ppe(frame, processed_preds_ppe)       # draw on original BGR frame
         vis = draw_reg_yolo(frame, processed_preds_reg)
 
