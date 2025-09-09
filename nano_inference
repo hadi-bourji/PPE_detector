@@ -400,37 +400,42 @@ def main():
             phone_count +=1
         else:
             phone_count = 0
-
+            
         violations = []
         
-		if no_coat_count >= violation_threshold:
-		    violations.append("coat")
-		if no_eyewear_count >= violation_threshold:
-		    violations.append("eyewear")
-		if no_gloves_count >= violation_threshold:
-		    violations.append("gloves")
-		if phone_count >= violation_threshold:
-		    violations.append("phone")	
-		
-		for label in violations:
-		    now = datetime.now()
-		    date_str = now.strftime("%d-%m-%Y")
-		    time_str = now.strftime("%H-%M-%S")
-		    
-		    save_dir = os.path.join(screenshot_dir, label, date_str)
-		    os.makedirs(save_dir, exist_ok=True)
-		    
-		    screenshot_path = os.path.join(save_dir, f"{time_str}.jpg")
-		    cv2.imwrite(screenshot_path, frame)
-		    
-	    if label=="coat":
-	    	no_coat_count = 0
-	    if label=="eyewear":
-	    	no_eyewear_count = 0
-	    if label=="gloves":
-	    	no_gloves_count = 0
-	    if label=="phone":
-	    	phone_count = 0
+        if no_coat_count >= violation_threshold:
+            violations.append("coat")
+        if no_eyewear_count >= violation_threshold:
+            violations.append("eyewear")
+        if no_gloves_count >= violation_threshold:
+            violations.append("gloves")
+        if phone_count >= violation_threshold:
+            violations.append("phone")
+            
+        for label in violations:
+            now = datetime.now()
+            date_str = now.strftime("%d-%m-%Y")
+            time_str = now.strftime("%H-%M-%S")
+            
+            save_dir = os.path.join(screenshot_dir, label, date_str)
+            os.makedirs(save_dir, exist_ok=True)
+            
+            screenshot_path = os.path.join(save_dir, f"{time_str}.jpg")
+            cv2.imwrite(screenshot_path, frame)	
+            
+            if label=="coat":
+                no_coat_count = 0
+            if label=="eyewear":
+                no_eyewear_count = 0
+            if label=="gloves":
+                no_gloves_count = 0
+            if label=="phone":
+                phone_count = 0
+	    
+	  	
+	    
+
+	    	
 
         # if count % 60 == 0:
         #    cv2.imwrite(f"imgs4/{count}_img.jpg", frame)
