@@ -1,0 +1,430 @@
+# trt_yolox_rt.py
+import os, time, pathlib, cv2, torch, numpy as np, tensorrt as trt
+import einops
+import torch.nn.functional as F
+
+ONNX_PATH_PPE   = os.path.join("onnx", "ft6.onnx")
+ENGINE_PATH_PPE =  os.path.join("engines", "ft6.plan") 
+ONNX_PATH_REGULAR = os.path.join("onnx", "yolox_s.onnx")
+ENGINE_PATH_REGULAR = os.path.join("engines", "yolox_m_int8+fp16.plan")
+CONF_TH     = 0.50
+IOU_TH      = 0.50
+INPUT_SIZE  = 640                       # model expects square 640×640
+MAX_OUTPUT_BOXES = 30
+print(trt.__version__)
+
+TRT_LOGGER  = trt.Logger(trt.Logger.WARNING)
+
+def post_process_img(output: torch.Tensor, confidence_threshold: float = 0.25, iou_threshold: float = 0.5) -> torch.Tensor:
+    '''This function expects the output to be in pixel values and sigmoid to already be applied
+    to obj and class probabilities.
+
+    :param torch.Tensor output: The model's output on a given image.
+    :param float confidence_threshold: The confidence threshold for filtering predictions. Defaults to 0.25
+    :param float iou_threshold: The IoU threshold for filtering predictions. Defaults to 0.5
+    :return torch.Tensor: The processed predictions in x1 y1 x2 y2 format (top left and bottom right points)
+    '''
+    x1 = output[..., 0:1] - output[..., 2:3] / 2
+    y1 = output[..., 1:2] - output[..., 3:4] / 2
+    x2 = output[..., 0:1] + output[..., 2:3] / 2
+    y2 = output[..., 1:2] + output[..., 3:4] / 2
+
+    # boxes: (batch, num_anchors, 4)
+    boxes = torch.cat([x1, y1, x2, y2], dim=-1)
+
+    # (batch, num_anchors, 1)
+    obj = output[..., 4:5]
+    class_probs = output[..., 5:]
+
+    scores = obj * class_probs
+    best_scores, best_class = scores.max(dim=-1)
+
+    mask = best_scores > confidence_threshold
+    best_scores = best_scores[mask] 
+    best_class = best_class[mask] 
+    boxes = boxes[mask]
+    keep = nms(boxes, best_scores, iou_threshold = iou_threshold)
+    final_boxes = boxes[keep]
+    final_classes = best_class[keep]
+    final_scores = best_scores[keep]
+    # final classes and final scores have shape (num_kept,), so unsqueeze to add the dim 1 again
+    predictions = torch.cat((final_classes.unsqueeze(1), 
+                             final_boxes, 
+                             final_scores.unsqueeze(1)), dim=1)
+    return predictions
+
+
+def _box_iou(boxes1: torch.Tensor, boxes2: torch.Tensor) -> torch.Tensor:
+    '''Compute the IoU matrix between two sets of axis-aligned bounding boxes.
+
+    :param boxes1: First set of boxes in (x1, y1, x2, y2) format.
+    :type boxes1: torch.Tensor
+    :param boxes2: Second set of boxes in (x1, y1, x2, y2) format.
+    :type boxes2: torch.Tensor
+    :return: IoU matrix of shape (N, M) where N and M are the number of boxes in boxes1 and boxes2.
+    :rtype: torch.Tensor
+    '''
+    """
+    Vectorized IoU for two -sets- of axis-aligned boxes.
+    boxes{1,2}: (N, 4) or (M, 4) in XYXY format (x1, y1, x2, y2)
+    Returns:    (N, M) IoU matrix
+    """
+    # areas
+    area1 = (boxes1[:, 2] - boxes1[:, 0]).clamp(0) * (
+        boxes1[:, 3] - boxes1[:, 1]
+    ).clamp(0)
+    area2 = (boxes2[:, 2] - boxes2[:, 0]).clamp(0) * (
+        boxes2[:, 3] - boxes2[:, 1]
+    ).clamp(0)
+
+    # pairwise intersections
+    lt = torch.maximum(boxes1[:, None, :2], boxes2[:, :2])  # (N, M, 2)
+    rb = torch.minimum(boxes1[:, None, 2:], boxes2[:, 2:])  # (N, M, 2)
+    wh = (rb - lt).clamp(min=0)                             # width‑height
+    inter = wh[..., 0] * wh[..., 1]                         # (N, M)
+
+    # IoU = inter / (area1 + area2 - inter)
+    return inter / (area1[:, None] + area2 - inter + 1e-7)
+
+
+def nms(boxes: torch.Tensor, scores: torch.Tensor, iou_threshold: float) -> torch.Tensor:
+    '''Perform Non-Maximum Suppression (NMS) on bounding boxes.
+
+    :param boxes: Bounding boxes in (x1, y1, x2, y2) format.
+    :type boxes: torch.Tensor
+    :param scores: Confidence scores for each box.
+    :type scores: torch.Tensor
+    :param iou_threshold: IoU threshold for suppressing overlapping boxes.
+    :type iou_threshold: float
+    :return: Indices of boxes that survive NMS, sorted by descending score.
+    :rtype: torch.Tensor
+    '''
+    """
+    Pure-PyTorch Non-Maximum Suppression mirroring
+    torchvision.ops.nms(...).
+
+    Args
+    ----
+    boxes         (Tensor[N,4])  - boxes in (x1, y1, x2, y2) format
+    scores        (Tensor[N])     - confidence scores
+    iou_threshold (float)         - IoU overlap threshold to suppress
+
+    Returns
+    -------
+    keep (Tensor[K]) - indices of boxes that survive NMS,
+                       sorted in descending score order
+    """
+    if boxes.numel() == 0:
+        return torch.empty((0,), dtype=torch.int64, device=boxes.device)
+
+    # sort by score descending
+    order = scores.argsort(descending=True)
+    keep = []
+
+    while order.numel() > 0:
+        i = order[0]              # index of current highest score
+        keep.append(i.item())
+
+        if order.numel() == 1:    # nothing left to compare
+            break
+
+        # IoU of the current box with the rest
+        ious = _box_iou(boxes[i].unsqueeze(0), boxes[order[1:]]).squeeze(0)
+
+        # keep boxes with IoU ≤ threshold
+        order = order[1:][ious <= iou_threshold]
+
+    return torch.as_tensor(keep, dtype=torch.long, device=boxes.device)
+
+    
+def draw_reg_yolo(n, outputs):
+    coco_classes = [
+    "person", "bicycle", "car", "motorcycle", "airplane", "bus", "train", "truck", "boat",
+    "traffic light", "fire hydrant", "stop sign", "parking meter", "bench",
+    "bird", "cat", "dog", "horse", "sheep", "cow", "elephant", "bear", "zebra", "giraffe",
+    "backpack", "umbrella", "handbag", "tie", "suitcase",
+    "frisbee", "skis", "snowboard", "sports ball", "kite", "baseball bat", "baseball glove",
+    "skateboard", "surfboard", "tennis racket",
+    "bottle", "wine glass", "cup", "fork", "knife", "spoon", "bowl",
+    "banana", "apple", "sandwich", "orange", "broccoli", "carrot", "hot dog", "pizza", "donut", "cake",
+    "chair", "couch", "potted plant", "bed", "dining table", "toilet",
+    "tv", "laptop", "mouse", "remote", "keyboard", "cell phone",
+    "microwave", "oven", "toaster", "sink", "refrigerator",
+    "book", "clock", "vase", "scissors", "teddy bear", "hair drier", "toothbrush"
+    ]
+    color = (68,182,235)
+    outputs = outputs[outputs[:,0] == 67]
+
+    for label in outputs:
+        c, x1, y1, x2, y2, s = label
+        # print(f"Detected: {c}, {x1}, {y1}, {x2}, {y2}, {s}")
+
+        x1 = int(x1)
+        y1 = int(y1)
+        x2 = int(x2)
+        y2 = int(y2)
+        text = f"cell phone {s:.2f}"
+
+        cv2.rectangle(n, (x1, y1), (x2, y2), color, 1)
+        (tw, th), _ = cv2.getTextSize(text, cv2.FONT_HERSHEY_SIMPLEX,
+                                    fontScale=0.5, thickness=1)
+        cv2.rectangle(n, (x1, y1 - th - 4), (x1 + tw, y1), color, -1)   # filled bg
+        cv2.putText(n, text, (x1, y1 - 2),
+            cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0,0,0), 1, cv2.LINE_AA, )
+    return n
+
+def draw_ppe(n, outputs):
+    edge_colors = [(255,255,255),(0,0,255), (255, 0, 255),(0,255,255), (255,255,0), (180, 180, 255)]
+    class_names = ["coat", "no-coat", "eyewear", "no-eyewear", "gloves", "no-gloves"]
+    for label in outputs:
+        c, x1, y1, x2, y2, s = label
+        # print(f"Detected: {c}, {x1}, {y1}, {x2}, {y2}, {s}")
+        if c == -1:
+            continue
+
+        x1 = int(x1)
+        y1 = int(y1)
+        x2 = int(x2)
+        y2 = int(y2)
+        text = f"{class_names[int(c.item())]} {s:.2f}"
+        color = edge_colors[int(c.item())]
+
+        cv2.rectangle(n, (x1, y1), (x2, y2), color, 1)
+        (tw, th), _ = cv2.getTextSize(text, cv2.FONT_HERSHEY_SIMPLEX,
+                                    fontScale=0.5, thickness=1)
+        cv2.rectangle(n, (x1, y1 - th - 4), (x1 + tw, y1), color, -1)   # filled bg
+        cv2.putText(n, text, (x1, y1 - 2),
+            cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0,0,0), 1, cv2.LINE_AA)
+    return n
+
+def process_frame(frame, device = 'cuda', output_size = 640):
+    # THIS CURRENTLY EXPECTS IMAGES TO ALREADY BE UNDER 640x640
+    # in order to shrink using this function uncomment the scale = ... lines
+
+    # Preprocess the frame for YOLOX
+    img = einops.rearrange(frame, 'h w c -> c h w')  # Change to CHW format
+    img = torch.from_numpy(img).float().to(device)
+
+    #new_height, new_width = img.shape[1:]
+    height, width = img.shape[1:]
+    scale = min(output_size / width, output_size / height)
+    new_width, new_height = int(width * scale), int(height * scale)
+    img = F.interpolate(img.unsqueeze(0), size=(new_height, new_width), mode='bilinear', align_corners=False)
+
+    # pad with grey (114, 114, 114), not normalized
+    pad_top = (output_size - new_height) // 2
+    pad_bottom = output_size - new_height - pad_top
+    pad_left = (output_size - new_width) // 2
+    pad_right = output_size - new_width - pad_left        
+
+    img = F.pad(img, (pad_left, pad_right, pad_top, pad_bottom), value = 114.0)
+    return img.squeeze(0), (pad_top, pad_bottom, pad_left, pad_right)
+
+# 1.  Build or load TensorRT engine                                           #
+# --------------------------------------------------------------------------- #
+def build_engine(onnx_path: str, engine_path: str, precision = "fp16") -> trt.ICudaEngine:
+
+    if os.path.exists(engine_path):
+        with open(engine_path, "rb") as f, trt.Runtime(TRT_LOGGER) as rt:
+            return rt.deserialize_cuda_engine(f.read())
+    logger = TRT_LOGGER
+
+    builder = trt.Builder(logger)
+    network_flags = \
+        (1 << int(trt.NetworkDefinitionCreationFlag.EXPLICIT_BATCH))      # mandatory for ONNX
+    #| (1 << int(trt.NetworkDefinitionCreationFlag.STRONGLY_TYPED))          )
+    network = builder.create_network(network_flags)
+    parser = trt.OnnxParser(network, logger)
+    success = parser.parse_from_file(onnx_path)
+    for idx in range(parser.num_errors):
+        print(parser.get_error(idx))
+    
+    if not success:
+        raise Exception("Onnx parsing failed")
+
+    config = builder.create_builder_config()
+    # arbitrary, maybe play with this
+    config.set_memory_pool_limit(trt.MemoryPoolType.WORKSPACE, 1 << 28)   # 256 MiB
+    if "fp16" in precision:
+        print("building with FP16")
+        config.set_flag(trt.BuilderFlag.FP16)
+    if "int8" in precision:
+        print("building with int8")
+        config.set_flag(trt.BuilderFlag.INT8)
+    if "fp8" in precision:
+        print("building with fp8")
+        config.set_flag(trt.BuilderFlag.FP8)
+
+    print("Building TensorRT engine …")
+    serialized_engine = builder.build_serialized_network(network, config)
+    if serialized_engine is None:
+        raise RuntimeError("Engine build failed")
+    print("Completed build")
+
+    # save .plan
+    with open(engine_path, "wb") as f:
+        f.write(serialized_engine)
+
+# load for inference
+    runtime = trt.Runtime(logger)
+    engine = runtime.deserialize_cuda_engine(serialized_engine)
+    return engine
+
+def main():
+
+    print("building...")
+    engine_ppe = build_engine(ONNX_PATH_PPE, ENGINE_PATH_PPE, precision=["fp16"])
+    engine_reg = build_engine(ONNX_PATH_REGULAR, ENGINE_PATH_REGULAR)
+
+    context_ppe = engine_ppe.create_execution_context()
+    context_reg = engine_reg.create_execution_context()
+
+    # --------------------------------------------------------------------------- #
+    # 2.  Allocate CUDA I/O buffers – use torch tensors for convenience           #
+    # --------------------------------------------------------------------------- #
+    input_shape = (1,3,640,640)
+    output_shape_ppe = (1, 8400, 11)
+    output_shape_reg = (1, 8400, 85)
+
+    # allocate with torch (pinned host <-> device copies handled by cuda.to_dlpack)
+    inp_torch_ppe  = torch.empty(size=input_shape, dtype=torch.float32, device="cuda")
+    inp_torch_reg  = torch.empty(size=input_shape, dtype=torch.float32, device="cuda")
+    preds_ppe  = torch.empty(size=output_shape_ppe, dtype=torch.float32, device="cuda")
+    preds_reg  = torch.empty(size=output_shape_reg, dtype=torch.float32, device="cuda")
+
+    d_in_ppe  = inp_torch_ppe.data_ptr()
+    d_out_ppe = preds_ppe.data_ptr()
+    d_in_reg  = inp_torch_reg.data_ptr()
+    d_out_reg = preds_reg.data_ptr()
+
+
+    context_ppe.set_tensor_address("input", d_in_ppe)
+    context_ppe.set_tensor_address("output", d_out_ppe)
+    context_reg.set_tensor_address("input", d_in_reg)
+    context_reg.set_tensor_address("output", d_out_reg)
+    stream_ppe = torch.cuda.Stream()
+    stream_reg = torch.cuda.Stream()
+
+    # --------------------------------------------------------------------------- #
+    # 3.  Video loop                                                              #
+    # --------------------------------------------------------------------------- #
+
+    cap = cv2.VideoCapture(0)
+    if not cap.isOpened():
+        raise RuntimeError("Camera open failed")
+    cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
+    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
+    cv2.namedWindow("trt", cv2.WINDOW_NORMAL)
+    cv2.setWindowProperty("trt",
+            cv2.WND_PROP_FULLSCREEN,
+            cv2.WINDOW_FULLSCREEN)
+
+    frame_count, t0 = 0, time.time()
+
+    run=0
+    count=0
+    
+    no_coat_count = 0
+    no_eyewear_count = 0
+    no_gloves_count = 0
+    yes_phone_count = 0
+
+    violation_threshold = 600 #at 10 fps and 60 seconds == 600 frames in a minute
+    screenshot_dir = "/home/eurofins/ppe_violations"
+
+    while True:
+        ok, frame = cap.read()
+        if not ok:
+            break
+
+        count+=1
+
+        frame_count += 1
+        frame = cv2.flip(frame, 0)
+        img, _ = process_frame(frame, device="cuda", output_size=INPUT_SIZE)  # cpu tensor
+        inp_torch_ppe.copy_(img)                      # H2D via unified memory
+        inp_torch_reg.copy_(img)
+
+        # --- inference --------------------------------------------------------- #
+        with torch.cuda.stream(stream_ppe):
+            context_ppe.execute_async_v3(stream_handle=stream_ppe.cuda_stream)
+
+        with torch.cuda.stream(stream_reg):
+            context_reg.execute_async_v3(stream_handle = stream_reg.cuda_stream)
+
+        stream_ppe.synchronize()
+        stream_reg.synchronize()
+        
+        # ---------------------------------------------------------------------- #
+
+        processed_preds_ppe = post_process_img(
+            preds_ppe[0], confidence_threshold=CONF_TH, iou_threshold=IOU_TH
+        ).cpu().numpy()
+
+
+        if processed_preds_ppe.any():
+            # print("HELLO")
+            processed_preds_ppe[..., 2] = processed_preds_ppe[..., 2] - 140
+            processed_preds_ppe[..., 4] = processed_preds_ppe[..., 4] - 140
+            processed_preds_ppe[..., 1:5] *= 2
+
+        processed_preds_reg = post_process_img(
+            preds_reg[0], confidence_threshold=0.25, iou_threshold=IOU_TH
+        ).cpu().numpy()
+ 
+        if processed_preds_reg.any():
+            processed_preds_reg[..., 2] = processed_preds_reg[..., 2] - 140
+            processed_preds_reg[..., 4] = processed_preds_reg[..., 4] - 140
+            processed_preds_reg[..., 1:5] *= 2
+        
+        ppe_classes = processed_preds_ppe[:,0].astype(int)
+        reg_classes = processed_preds_reg[:,0].astype(int)
+        
+        if 1 in ppe_classes:
+            no_coat_count +=1
+        else:
+            no_coat_count = 0
+
+        if 3 in ppe_classes:
+            no_eyewear_count +=1
+        else:
+            no_eyewear_count = 0
+
+        if 5 in ppe_classes:
+            no_gloves_count +=1
+        else:
+            no_gloves_count = 0
+
+        if 67 in reg_classes:
+            phone_count +=1
+        else:
+            phone_count = 0
+
+        violation = False
+        if no_coat_count >= violation_threshold:
+            violation = True
+            label = "no_coat"
+
+
+
+
+        # if count % 60 == 0:
+        #    cv2.imwrite(f"imgs4/{count}_img.jpg", frame)
+        vis = draw_ppe(frame, processed_preds_ppe)       # draw on original BGR frame
+        vis = draw_reg_yolo(frame, processed_preds_reg)
+
+        cv2.imshow("trt", vis)
+        if cv2.waitKey(1) & 0xFF == ord('q'):           # q quits
+            break
+
+        #if frame_count == 600:
+            #fps = frame_count / (time.time() - t0)
+            #t0 = time.time()
+            #frame_count = 0
+            #print(f"FPS {fps:.2f}")
+
+    cap.release()
+    cv2.destroyAllWindows()
+
+if __name__ == "__main__":
+    main()
