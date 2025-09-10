@@ -399,7 +399,7 @@ def main():
         if 67 in reg_classes:
             phone_count +=1
         else:
-            phone_count = 0
+            phone_count = max(0, phone_count-1)
             
         violations = []
         
