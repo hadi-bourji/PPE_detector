@@ -233,10 +233,7 @@ def main():
         
         # ---------------------------------------------------------------------- #
 
-        processed_preds_ppe = post_process_img(
-            preds_ppe[0], confidence_threshold=CONF_TH, iou_threshold=IOU_TH
-        ).cpu().numpy()
-
+        processed_preds_ppe = post_process_img(preds_ppe[0], confidence_threshold=CONF_TH, iou_threshold=IOU_TH).cpu().numpy()
 
         if processed_preds_ppe.any():
             # print("HELLO")
@@ -244,9 +241,7 @@ def main():
             processed_preds_ppe[..., 4] = processed_preds_ppe[..., 4] - 140
             processed_preds_ppe[..., 1:5] *= 2
 
-        processed_preds_reg = post_process_img(
-            preds_reg[0], confidence_threshold=0.25, iou_threshold=IOU_TH
-        ).cpu().numpy()
+        processed_preds_reg = post_process_img(preds_reg[0], confidence_threshold=0.25, iou_threshold=IOU_TH).cpu().numpy()
  
         if processed_preds_reg.any():
             processed_preds_reg[..., 2] = processed_preds_reg[..., 2] - 140

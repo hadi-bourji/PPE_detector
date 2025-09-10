@@ -3,8 +3,8 @@ from PIL import Image, ImageTk
 import os
 
 DATA_DIR = "./images"  # image directory
-CAMERAS = ["camera_1", "camera_2", "camera_3"]
-OBJECTS = ["coat", "gloves", "glasses", "cell_phone"]
+CAMERAS = [d for d in os.listdir(DATA_DIR) if os.path.isdir(os.path.join(DATA_DIR, d))]
+OBJECTS = ["coat", "gloves", "eyewear", "phone"]
 
 # loads images from folder
 def get_images(camera, obj, date):
@@ -23,11 +23,9 @@ class PPEViewer(tk.Tk):
         self.current_date = None
         self.image_refs = []  # store PhotoImage refs to prevent garbage collection
 
-        # Container frame
         self.container = tk.Frame(self)
         self.container.pack(fill="both", expand=True)
 
-        # Initialize pages
         self.pages = {}
         for Page in (Page1, Page2, Page3):
             page = Page(parent=self.container, controller=self)
@@ -64,10 +62,8 @@ class Page2(tk.Frame):
         self.label = tk.Label(self, text="", font=("Arial", 20))
         self.label.pack(pady=20)
 
-        
         self.sub_label = tk.Label(self, text="Select an object to view violations.", font=("Arial", 16))
         self.sub_label.pack(pady=(0, 15))  
-
 
         self.buttons_frame = tk.Frame(self)
         self.buttons_frame.pack(pady=10)
@@ -116,17 +112,13 @@ class Page3(tk.Frame):
         self.canvas = tk.Canvas(self.images_frame)
         self.scrollbar = tk.Scrollbar(self.images_frame, orient="vertical", command=self.canvas.yview)
         self.scrollable_frame = tk.Frame(self.canvas)
-        self.scrollable_frame.bind(
-            "<Configure>",
-            lambda e: self.canvas.configure(scrollregion=self.canvas.bbox("all"))
-        )
+        self.scrollable_frame.bind("<Configure>", lambda e: self.canvas.configure(scrollregion=self.canvas.bbox("all")))
         self.canvas.create_window((0, 0), window=self.scrollable_frame, anchor="nw")
         self.canvas.configure(yscrollcommand=self.scrollbar.set)
         self.canvas.pack(side="left", fill="both", expand=True)
         self.scrollbar.pack(side="right", fill="y")
 
-        tk.Button(self, text="Back to Objects",
-                  command=lambda: controller.show_page(Page2)).pack(side="bottom", pady=10)
+        tk.Button(self, text="Back to Objects", command=lambda: controller.show_page(Page2)).pack(side="bottom", pady=10)
 
     def tkraise(self, *args, **kwargs):
         super().tkraise(*args, **kwargs)
@@ -134,7 +126,6 @@ class Page3(tk.Frame):
         obj = self.controller.current_object
         self.label.config(text=f"{cam.replace("_", " ").title()} {obj.replace("_", " ")} violations.")
 
-        # Populate listbox with available dates
         self.date_listbox.delete(0, tk.END)
         date_dir = os.path.join(DATA_DIR, cam, obj)
         if os.path.exists(date_dir):
