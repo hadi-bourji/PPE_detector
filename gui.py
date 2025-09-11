@@ -109,7 +109,7 @@ class Page3(tk.Frame):
         # Image display area (scrollable)
         self.images_frame = tk.Frame(self)
         self.images_frame.pack(pady=10, fill="both", expand=True)
-        self.canvas = tk.Canvas(self.images_frame)
+        self.canvas = tk.Canvas(self.images_frame, height=550)
         self.scrollbar = tk.Scrollbar(self.images_frame, orient="vertical", command=self.canvas.yview)
         self.scrollable_frame = tk.Frame(self.canvas)
         self.scrollable_frame.bind("<Configure>", lambda e: self.canvas.configure(scrollregion=self.canvas.bbox("all")))
