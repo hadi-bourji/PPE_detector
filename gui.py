@@ -105,12 +105,16 @@ class Page3(tk.Frame):
         self.date_scrollbar.pack(side="right", fill="y")
 
         self.date_listbox.bind("<<ListboxSelect>>", self.load_images_from_listbox)
-
         # Image display area (scrollable)
         self.images_frame = tk.Frame(self)
         self.images_frame.pack(pady=10, fill="both", expand=True)
-        self.canvas = tk.Canvas(self.images_frame, height=550)#change this to change image box height
-        self.scrollbar = tk.Scrollbar(self.images_frame, orient="vertical", command=self.canvas.yview)
+
+        # Frame to hold canvas + vertical scrollbar
+        self.canvas_frame = tk.Frame(self.images_frame)
+        self.canvas_frame.pack(fill="both", expand=True)
+
+        self.canvas = tk.Canvas(self.canvas_frame, height=550, width=950)
+        self.scrollbar = tk.Scrollbar(self.canvas_frame, orient="vertical", command=self.canvas.yview)
         self.scrollable_frame = tk.Frame(self.canvas)
         self.scrollable_frame.bind("<Configure>", lambda e: self.canvas.configure(scrollregion=self.canvas.bbox("all")))
         self.canvas.create_window((0, 0), window=self.scrollable_frame, anchor="nw")
@@ -118,7 +122,8 @@ class Page3(tk.Frame):
         self.canvas.pack(side="left", fill="both", expand=True)
         self.scrollbar.pack(side="right", fill="y")
 
-        tk.Button(self, text="Back to Objects", command=lambda: controller.show_page(Page2)).pack(side="bottom", pady=10)
+        # Back button stays below the canvas
+        tk.Button(self.images_frame, text="Back to Objects", command=lambda: controller.show_page(Page2)).pack(pady=10)
 
     def tkraise(self, *args, **kwargs):
         super().tkraise(*args, **kwargs)
@@ -154,15 +159,22 @@ class Page3(tk.Frame):
         if not image_paths:
             tk.Label(self.scrollable_frame, text="No images found").pack()
             return
-
-        for path in image_paths:
+        columns = 3
+        for idx, path in enumerate(image_paths):
             try:
                 img = Image.open(path)
                 img.thumbnail((300, 300))
                 photo = ImageTk.PhotoImage(img)
                 self.controller.image_refs.append(photo)
-                tk.Label(self.scrollable_frame, image=photo).pack(pady=5)
-                tk.Label(self.scrollable_frame, text=os.path.basename(path)).pack(pady=2)
+
+                row = idx // columns
+                col = idx % columns
+
+                img_label = tk.Label(self.scrollable_frame, image=photo)
+                img_label.grid(row=row*2, column=col, padx=5, pady=5)
+
+                text_label = tk.Label(self.scrollable_frame, text=os.path.basename(path))
+                text_label.grid(row=row*2+1, column=col, padx=5, pady=(0,10))
             except Exception as e:
                 print(f"Error loading {path}: {e}")
 
