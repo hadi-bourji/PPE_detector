@@ -1,5 +1,6 @@
 #!/bin/bash
-
+#pull_nano.sh
+### can scale to multiple devices
 NANO_USERNAME=eurofins
 NANO_IP=10.172.0.50
 NANO_DIR=/home/eurofins/ppe_violations/nano_camera

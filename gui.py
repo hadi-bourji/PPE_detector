@@ -1,6 +1,9 @@
 import tkinter as tk
 from PIL import Image, ImageTk
 import os
+import subprocess
+from tkinter import messagebox
+
 
 DATA_DIR = "./images"  # image directory
 CAMERAS = [d for d in os.listdir(DATA_DIR) if os.path.isdir(os.path.join(DATA_DIR, d))]
@@ -38,6 +41,19 @@ class PPEViewer(tk.Tk):
         page = self.pages[page_class]
         page.tkraise()
 
+    
+def pull_from_nano(nano_username="eurofins", nano_ip="10.172.0.50", nano_dir="/home/eurofins/ppe_violations/nano_camera", local_dir="./images"):
+    try:
+        result = subprocess.run(
+            ["scp", "-r", f"{nano_username}@{nano_ip}:{nano_dir}", local_dir],
+            check=True,  
+            capture_output=True,
+            text=True
+        )
+        messagebox.showinfo("Success", "Images pulled successfully.")
+    except subprocess.CalledProcessError as e:
+        messagebox.showerror("Error", f"Failed to pull images:\n{e.stderr}")
+
 class Page1(tk.Frame):
     def __init__(self, parent, controller):
         super().__init__(parent)
@@ -50,9 +66,16 @@ class Page1(tk.Frame):
             btn = tk.Button(self, text=cam_label, width=20, command=lambda c=cam: self.select_camera(c))
             btn.pack(pady=5)
 
+        pull_frame = tk.Frame(self)
+        pull_frame.pack(anchor="e", padx=20, pady=10) 
+        tk.Button(pull_frame, text="Retrieve images", width=20, command=pull_from_nano).pack()
+
     def select_camera(self, camera):
         self.controller.current_camera = camera
         self.controller.show_page(Page2)
+
+    
+
 
 class Page2(tk.Frame):
     def __init__(self, parent, controller):
