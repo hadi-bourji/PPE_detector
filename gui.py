@@ -41,40 +41,70 @@ class PPEViewer(tk.Tk):
         page = self.pages[page_class]
         page.tkraise()
 
-    
-def pull_from_nano(nano_username="eurofins", nano_ip="10.172.0.50", nano_dir="/home/eurofins/ppe_violations/nano_camera", local_dir="./images"):
-    try:
-        result = subprocess.run(
-            ["scp", "-r", f"{nano_username}@{nano_ip}:{nano_dir}", local_dir],
-            check=True,  
-            capture_output=True,
-            text=True
-        )
-        messagebox.showinfo("Success", "Images pulled successfully.")
-    except subprocess.CalledProcessError as e:
-        messagebox.showerror("Error", f"Failed to pull images:\n{e.stderr}")
+
+def pull_from_nanos(nanos, local_dir="./images"):
+    for nano in nanos:
+        nano_username = nano.get("username", "eurofins")
+        nano_ip = nano["ip"]
+        nano_dir = nano.get("dir", "/home/eurofins/ppe_violations/nano_camera")
+        try:
+            subprocess.run(
+                ["scp", "-r", f"{nano_username}@{nano_ip}:{nano_dir}", local_dir],
+                check=True,
+                capture_output=True,
+                text=True
+            )
+            messagebox.showinfo("Success", f"Images pulled successfully from {nano_username}.")
+        except subprocess.CalledProcessError as e:
+            messagebox.showerror("Error", f"Failed to pull images from {nano_username}:\n{e.stderr}")
+
 
 class Page1(tk.Frame):
     def __init__(self, parent, controller):
         super().__init__(parent)
         self.controller = controller
 
+        # Title at top
         tk.Label(self, text="Select a camera to view.", font=("Arial", 20)).pack(pady=20)
+
+        # Frame to hold camera buttons (centered)
+        self.cam_frame = tk.Frame(self)
+        self.cam_frame.pack(pady=10)
+
+        # Pull button frame (aligned to top-right)
+        self.pull_frame = tk.Frame(self)
+        self.pull_frame.pack(anchor="ne", padx=20, pady=10)
+        tk.Button(self.pull_frame, text="Retrieve latest images", width=20,
+                  command=self.pull_and_refresh).pack()
+
+    def tkraise(self, *args, **kwargs):
+        super().tkraise(*args, **kwargs)
+
+        # Clear old camera buttons
+        for widget in self.cam_frame.winfo_children():
+            widget.destroy()
+
+        # Refresh camera list
+        global CAMERAS
+        CAMERAS = [d for d in os.listdir(DATA_DIR) if os.path.isdir(os.path.join(DATA_DIR, d))]
 
         for cam in CAMERAS:
             cam_label = cam.replace("_", " ").title()
-            btn = tk.Button(self, text=cam_label, width=20, command=lambda c=cam: self.select_camera(c))
+            btn = tk.Button(self.cam_frame, text=cam_label, width=20,
+                            command=lambda c=cam: self.select_camera(c))
             btn.pack(pady=5)
-
-        pull_frame = tk.Frame(self)
-        pull_frame.pack(anchor="e", padx=20, pady=10) 
-        tk.Button(pull_frame, text="Retrieve images", width=20, command=pull_from_nano).pack()
 
     def select_camera(self, camera):
         self.controller.current_camera = camera
         self.controller.show_page(Page2)
 
-    
+    def pull_and_refresh(self):
+        nanos = [
+            {"ip": "10.172.0.50", "username": "eurofins", "dir": "/home/eurofins/ppe_violations/nano_camera"}
+        ]
+        pull_from_nanos(nanos)
+        self.tkraise()
+
 
 
 class Page2(tk.Frame):
