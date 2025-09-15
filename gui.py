@@ -5,11 +5,11 @@ import subprocess
 from tkinter import messagebox
 
 
-DATA_DIR = "./images"  # image directory
+DATA_DIR = "./PPE_Violation_Images"  # directory on main computer that you want to save different nano image directories under
 CAMERAS = [d for d in os.listdir(DATA_DIR) if os.path.isdir(os.path.join(DATA_DIR, d))]
 OBJECTS = ["coat", "gloves", "eyewear", "phone"]
 
-# loads images from folder
+# help load images from folder
 def get_images(camera, obj, date):
     folder = os.path.join(DATA_DIR, camera, obj, date)
     if not os.path.exists(folder):
@@ -42,11 +42,11 @@ class PPEViewer(tk.Tk):
         page.tkraise()
 
 
-def pull_from_nanos(nanos, local_dir="./images"):
+def pull_from_nanos(nanos, local_dir=DATA_DIR):
     for nano in nanos:
-        nano_username = nano.get("username", "eurofins")
+        nano_username = nano["username"]
         nano_ip = nano["ip"]
-        nano_dir = nano.get("dir", "/home/eurofins/ppe_violations/nano_camera")
+        nano_dir = nano["dir"]
         try:
             subprocess.run(
                 ["scp", "-r", f"{nano_username}@{nano_ip}:{nano_dir}", local_dir],
@@ -64,34 +64,27 @@ class Page1(tk.Frame):
         super().__init__(parent)
         self.controller = controller
 
-        # Title at top
         tk.Label(self, text="Select a camera to view.", font=("Arial", 20)).pack(pady=20)
 
-        # Frame to hold camera buttons (centered)
         self.cam_frame = tk.Frame(self)
         self.cam_frame.pack(pady=10)
 
-        # Pull button frame (aligned to top-right)
         self.pull_frame = tk.Frame(self)
         self.pull_frame.pack(anchor="ne", padx=20, pady=10)
-        tk.Button(self.pull_frame, text="Retrieve latest images", width=20,
-                  command=self.pull_and_refresh).pack()
+        tk.Button(self.pull_frame, text="Retrieve latest images", width=20, command=self.pull_and_refresh).pack()
 
     def tkraise(self, *args, **kwargs):
         super().tkraise(*args, **kwargs)
 
-        # Clear old camera buttons
         for widget in self.cam_frame.winfo_children():
             widget.destroy()
 
-        # Refresh camera list
         global CAMERAS
         CAMERAS = [d for d in os.listdir(DATA_DIR) if os.path.isdir(os.path.join(DATA_DIR, d))]
 
         for cam in CAMERAS:
             cam_label = cam.replace("_", " ").title()
-            btn = tk.Button(self.cam_frame, text=cam_label, width=20,
-                            command=lambda c=cam: self.select_camera(c))
+            btn = tk.Button(self.cam_frame, text=cam_label, width=20, command=lambda c=cam: self.select_camera(c))
             btn.pack(pady=5)
 
     def select_camera(self, camera):
@@ -101,6 +94,7 @@ class Page1(tk.Frame):
     def pull_and_refresh(self):
         nanos = [
             {"ip": "10.172.0.50", "username": "eurofins", "dir": "/home/eurofins/ppe_violations/nano_camera"}
+            #add devices here that the main computer will pull images from
         ]
         pull_from_nanos(nanos)
         self.tkraise()
@@ -126,8 +120,7 @@ class Page2(tk.Frame):
             btn = tk.Button(self.buttons_frame, text=obj_label, width=20, command=lambda o=obj: self.select_object(o))
             btn.pack(pady=5)
 
-        tk.Button(self, text="Back to Cameras",
-                  command=lambda: controller.show_page(Page1)).pack(side="bottom", pady=20)
+        tk.Button(self, text="Back to Cameras", command=lambda: controller.show_page(Page1)).pack(side="bottom", pady=20)
 
     def tkraise(self, *args, **kwargs):
         super().tkraise(*args, **kwargs)
