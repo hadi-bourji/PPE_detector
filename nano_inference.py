@@ -5,7 +5,7 @@ import torch.nn.functional as F
 from datetime import datetime
 
 ONNX_PATH_PPE   = os.path.join("onnx", "ft6.onnx")
-ENGINE_PATH_PPE =  os.path.join("engines", "ft6.plan") 
+ENGINE_PATH_PPE =  os.path.join("engines", "ft6.plan")
 ONNX_PATH_REGULAR = os.path.join("onnx", "yolox_s.onnx")
 ENGINE_PATH_REGULAR = os.path.join("engines", "yolox_m_int8+fp16.plan")
 CONF_TH     = 0.50
@@ -41,16 +41,16 @@ def post_process_img(output: torch.Tensor, confidence_threshold: float = 0.25, i
     best_scores, best_class = scores.max(dim=-1)
 
     mask = best_scores > confidence_threshold
-    best_scores = best_scores[mask] 
-    best_class = best_class[mask] 
+    best_scores = best_scores[mask]
+    best_class = best_class[mask]
     boxes = boxes[mask]
     keep = nms(boxes, best_scores, iou_threshold = iou_threshold)
     final_boxes = boxes[keep]
     final_classes = best_class[keep]
     final_scores = best_scores[keep]
     # final classes and final scores have shape (num_kept,), so unsqueeze to add the dim 1 again
-    predictions = torch.cat((final_classes.unsqueeze(1), 
-                             final_boxes, 
+    predictions = torch.cat((final_classes.unsqueeze(1),
+                             final_boxes,
                              final_scores.unsqueeze(1)), dim=1)
     return predictions
 
@@ -137,7 +137,7 @@ def nms(boxes: torch.Tensor, scores: torch.Tensor, iou_threshold: float) -> torc
 
     return torch.as_tensor(keep, dtype=torch.long, device=boxes.device)
 
-    
+   
 def draw_reg_yolo(n, outputs):
     coco_classes = [
     "person", "bicycle", "car", "motorcycle", "airplane", "bus", "train", "truck", "boat",
@@ -239,7 +239,7 @@ def build_engine(onnx_path: str, engine_path: str, precision = "fp16") -> trt.IC
     success = parser.parse_from_file(onnx_path)
     for idx in range(parser.num_errors):
         print(parser.get_error(idx))
-    
+   
     if not success:
         raise Exception("Onnx parsing failed")
 
@@ -324,7 +324,7 @@ def main():
 
     run=0
     count=0
-    
+   
     no_coat_count = 0
     no_eyewear_count = 0
     no_gloves_count = 0
@@ -355,7 +355,7 @@ def main():
 
         stream_ppe.synchronize()
         stream_reg.synchronize()
-        
+       
         # ---------------------------------------------------------------------- #
 
         processed_preds_ppe = post_process_img(
@@ -377,10 +377,10 @@ def main():
             processed_preds_reg[..., 2] = processed_preds_reg[..., 2] - 140
             processed_preds_reg[..., 4] = processed_preds_reg[..., 4] - 140
             processed_preds_reg[..., 1:5] *= 2
-        
+       
         ppe_classes = processed_preds_ppe[:,0].astype(int)
         reg_classes = processed_preds_reg[:,0].astype(int)
-        
+       
         if 1 in ppe_classes:
             no_coat_count +=1
         else:
@@ -399,10 +399,10 @@ def main():
         if 67 in reg_classes:
             phone_count +=1
         else:
-            phone_count = max(0, phone_count-1)
-            
+            phone_count = max(0, phone_count-.1)
+           
         violations = []
-        
+       
         if no_coat_count >= violation_threshold:
             violations.append("coat")
         if no_eyewear_count >= violation_threshold:
@@ -411,18 +411,18 @@ def main():
             violations.append("gloves")
         if phone_count >= violation_threshold:
             violations.append("phone")
-            
+           
         for label in violations:
             now = datetime.now()
             date_str = now.strftime("%m-%d-%Y")
             time_str = now.strftime("%H-%M-%S")
-            
+           
             save_dir = os.path.join(screenshot_dir, label, date_str)
             os.makedirs(save_dir, exist_ok=True)
-            
+           
             screenshot_path = os.path.join(save_dir, f"{time_str}.jpg")
-            cv2.imwrite(screenshot_path, frame)	
-            
+            cv2.imwrite(screenshot_path, frame)
+           
             if label=="coat":
                 no_coat_count = 0
             if label=="eyewear":
@@ -431,7 +431,7 @@ def main():
                 no_gloves_count = 0
             if label=="phone":
                 phone_count = 0
-	    
+   
         vis = draw_ppe(frame, processed_preds_ppe)       # draw on original BGR frame
         vis = draw_reg_yolo(frame, processed_preds_reg)
 

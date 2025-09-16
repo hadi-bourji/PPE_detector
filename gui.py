@@ -100,7 +100,6 @@ class Page1(tk.Frame):
         self.tkraise()
 
 
-
 class Page2(tk.Frame):
     def __init__(self, parent, controller):
         super().__init__(parent)
