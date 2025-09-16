@@ -49,9 +49,7 @@ def post_process_img(output: torch.Tensor, confidence_threshold: float = 0.25, i
     final_classes = best_class[keep]
     final_scores = best_scores[keep]
     # final classes and final scores have shape (num_kept,), so unsqueeze to add the dim 1 again
-    predictions = torch.cat((final_classes.unsqueeze(1),
-                             final_boxes,
-                             final_scores.unsqueeze(1)), dim=1)
+    predictions = torch.cat((final_classes.unsqueeze(1), final_boxes, final_scores.unsqueeze(1)), dim=1)
     return predictions
 
 
@@ -158,8 +156,6 @@ def draw_reg_yolo(n, outputs):
 
     for label in outputs:
         c, x1, y1, x2, y2, s = label
-        # print(f"Detected: {c}, {x1}, {y1}, {x2}, {y2}, {s}")
-
         x1 = int(x1)
         y1 = int(y1)
         x2 = int(x2)
@@ -179,7 +175,6 @@ def draw_ppe(n, outputs):
     class_names = ["coat", "no-coat", "eyewear", "no-eyewear", "gloves", "no-gloves"]
     for label in outputs:
         c, x1, y1, x2, y2, s = label
-        # print(f"Detected: {c}, {x1}, {y1}, {x2}, {y2}, {s}")
         if c == -1:
             continue
 
@@ -358,21 +353,13 @@ def main():
        
         # ---------------------------------------------------------------------- #
 
-        processed_preds_ppe = post_process_img(
-            preds_ppe[0], confidence_threshold=CONF_TH, iou_threshold=IOU_TH
-        ).cpu().numpy()
-
-
+        processed_preds_ppe = post_process_img(preds_ppe[0], confidence_threshold=CONF_TH, iou_threshold=IOU_TH).cpu().numpy()
         if processed_preds_ppe.any():
-            # print("HELLO")
             processed_preds_ppe[..., 2] = processed_preds_ppe[..., 2] - 140
             processed_preds_ppe[..., 4] = processed_preds_ppe[..., 4] - 140
             processed_preds_ppe[..., 1:5] *= 2
 
-        processed_preds_reg = post_process_img(
-            preds_reg[0], confidence_threshold=0.25, iou_threshold=IOU_TH
-        ).cpu().numpy()
- 
+        processed_preds_reg = post_process_img(preds_reg[0], confidence_threshold=0.25, iou_threshold=IOU_TH).cpu().numpy() 
         if processed_preds_reg.any():
             processed_preds_reg[..., 2] = processed_preds_reg[..., 2] - 140
             processed_preds_reg[..., 4] = processed_preds_reg[..., 4] - 140
