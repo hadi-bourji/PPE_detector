@@ -21,12 +21,13 @@ class PPEViewer(tk.Tk):
         super().__init__()
         self.title("Houston Lab PPE Viewer")
         self.geometry("1000x700")
+        self.configure(bg="white")
         self.current_camera = None
         self.current_object = None
         self.current_date = None
         self.image_refs = []  # store PhotoImage refs to prevent garbage collection
 
-        self.container = tk.Frame(self)
+        self.container = tk.Frame(self, bg="white")
         self.container.pack(fill="both", expand=True)
 
         self.pages = {}
@@ -61,15 +62,15 @@ def pull_from_nanos(nanos, local_dir=DATA_DIR):
 
 class Page1(tk.Frame):
     def __init__(self, parent, controller):
-        super().__init__(parent)
+        super().__init__(parent, bg="white")
         self.controller = controller
 
-        tk.Label(self, text="Select a camera to view.", font=("Arial", 20)).pack(pady=20)
+        tk.Label(self, text="Select a camera to view.", font=("Arial", 20), bg="white").pack(pady=20)
 
-        self.cam_frame = tk.Frame(self)
+        self.cam_frame = tk.Frame(self, bg="white")
         self.cam_frame.pack(pady=10)
 
-        self.pull_frame = tk.Frame(self)
+        self.pull_frame = tk.Frame(self, bg="white")
         self.pull_frame.pack(anchor="ne", padx=20, pady=10)
         tk.Button(self.pull_frame, text="Retrieve latest images", width=20, command=self.pull_and_refresh).pack()
 
@@ -102,16 +103,16 @@ class Page1(tk.Frame):
 
 class Page2(tk.Frame):
     def __init__(self, parent, controller):
-        super().__init__(parent)
+        super().__init__(parent, bg="white")
         self.controller = controller
 
         self.label = tk.Label(self, text="", font=("Arial", 20))
         self.label.pack(pady=20)
 
-        self.sub_label = tk.Label(self, text="Select an object to view violations.", font=("Arial", 16))
+        self.sub_label = tk.Label(self, text="Select an object to view violations.", font=("Arial", 16), bg="white")
         self.sub_label.pack(pady=(0, 15))  
 
-        self.buttons_frame = tk.Frame(self)
+        self.buttons_frame = tk.Frame(self, bg="white")
         self.buttons_frame.pack(pady=10)
 
         for obj in OBJECTS:
@@ -124,7 +125,7 @@ class Page2(tk.Frame):
     def tkraise(self, *args, **kwargs):
         super().tkraise(*args, **kwargs)
         camera = self.controller.current_camera
-        self.label.config(text=f"Camera: {camera.replace("_", " ").title()}")
+        self.label.config(text=f"Camera: {camera.replace("_", " ").title()}", bg="white")
 
     def select_object(self, obj):
         self.controller.current_object = obj
@@ -132,13 +133,13 @@ class Page2(tk.Frame):
 
 class Page3(tk.Frame):
     def __init__(self, parent, controller):
-        super().__init__(parent)
+        super().__init__(parent, bg="white")
         self.controller = controller
 
         self.label = tk.Label(self, text="", font=("Arial", 20))
         self.label.pack(pady=10)
 
-        tk.Label(self, text="Select a Date:", font=("Arial", 16)).pack(pady=5)
+        tk.Label(self, text="Select a Date:", font=("Arial", 16), bg="white").pack(pady=5)
 
         # Scrollable listbox for dates
         self.listbox_frame = tk.Frame(self)
@@ -151,16 +152,16 @@ class Page3(tk.Frame):
 
         self.date_listbox.bind("<<ListboxSelect>>", self.load_images_from_listbox)
         # Image display area (scrollable)
-        self.images_frame = tk.Frame(self)
+        self.images_frame = tk.Frame(self, bg="white")
         self.images_frame.pack(pady=10, fill="both", expand=True)
 
         # Frame to hold canvas + vertical scrollbar
-        self.canvas_frame = tk.Frame(self.images_frame)
+        self.canvas_frame = tk.Frame(self.images_frame, bg="white")
         self.canvas_frame.pack(fill="both", expand=True)
 
-        self.canvas = tk.Canvas(self.canvas_frame, height=550, width=950)
+        self.canvas = tk.Canvas(self.canvas_frame, height=550, width=950, bg="white")
         self.scrollbar = tk.Scrollbar(self.canvas_frame, orient="vertical", command=self.canvas.yview)
-        self.scrollable_frame = tk.Frame(self.canvas)
+        self.scrollable_frame = tk.Frame(self.canvas, bg="white")
         self.scrollable_frame.bind("<Configure>", lambda e: self.canvas.configure(scrollregion=self.canvas.bbox("all")))
         self.canvas.create_window((0, 0), window=self.scrollable_frame, anchor="nw")
         self.canvas.configure(yscrollcommand=self.scrollbar.set)
@@ -174,7 +175,7 @@ class Page3(tk.Frame):
         super().tkraise(*args, **kwargs)
         cam = self.controller.current_camera
         obj = self.controller.current_object
-        self.label.config(text=f"{cam.replace("_", " ").title()} {obj.replace("_", " ")} violations.")
+        self.label.config(text=f"{cam.replace("_", " ").title()} {obj.replace("_", " ")} violations.", bg="white")
 
         self.date_listbox.delete(0, tk.END)
         date_dir = os.path.join(DATA_DIR, cam, obj)
@@ -218,7 +219,7 @@ class Page3(tk.Frame):
                 img_label = tk.Label(self.scrollable_frame, image=photo)
                 img_label.grid(row=row*2, column=col, padx=5, pady=5)
 
-                text_label = tk.Label(self.scrollable_frame, text=os.path.basename(path))
+                text_label = tk.Label(self.scrollable_frame, text=os.path.basename(path), bg="white")
                 text_label.grid(row=row*2+1, column=col, padx=5, pady=(0,10))
             except Exception as e:
                 print(f"Error loading {path}: {e}")
