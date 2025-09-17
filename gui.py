@@ -72,7 +72,7 @@ class Page1(tk.Frame):
         logo_label = tk.Label(self, image=self.logo_photo, bg="#FFFFFF")
         logo_label.pack(pady=10)
         
-        tk.Label(self, text="Select a camera to view.", font=("Arial", 20), bg="#FFFFFF", fg="#003883").pack(pady=20)
+        tk.Label(self, text="Select a camera to view.", font=("Inter", 20), bg="#FFFFFF", fg="#003883").pack(pady=20)
 
         self.cam_frame = tk.Frame(self, bg="#FFFFFF")
         self.cam_frame.pack(pady=10)
@@ -124,11 +124,11 @@ class Page2(tk.Frame):
         self.logo_photo = ImageTk.PhotoImage(logo_img)
         tk.Label(top_frame, image=self.logo_photo, bg="#FFFFFF").pack()
 
-        self.label = tk.Label(top_frame, text="", font=("Arial", 20), bg="#FFFFFF", fg="#003883")
+        self.label = tk.Label(top_frame, text="", font=("Inter", 20), bg="#FFFFFF", fg="#003883")
         self.label.pack(pady=(20,5))
 
         self.sub_label = tk.Label(top_frame, text="Select an object to view violations.",
-                                  font=("Arial", 16), bg="#FFFFFF", fg="#003883")
+                                  font=("Inter", 16), bg="#FFFFFF", fg="#003883")
         self.sub_label.pack(pady=(0,10))
 
         # --- Middle frame: object buttons ---
@@ -163,10 +163,10 @@ class Page3(tk.Frame):
         super().__init__(parent, bg="#FFFFFF")
         self.controller = controller
        
-        self.label = tk.Label(self, text="", font=("Arial", 20))
+        self.label = tk.Label(self, text="", font=("Inter", 20))
         self.label.pack(pady=10)
 
-        tk.Label(self, text="Select a date to view violations.", font=("Arial", 16), bg="#FFFFFF", fg="#003883").pack(pady=5)
+        tk.Label(self, text="Select a date to view violations.", font=("Inter", 16), bg="#FFFFFF", fg="#003883").pack(pady=5)
 
         # Scrollable listbox for dates
         self.listbox_frame = tk.Frame(self)
